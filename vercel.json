@@ -6,6 +6,10 @@
       "destination": "/outputs/index.html"
     },
     {
+      "source": "/index.html",
+      "destination": "/outputs/index.html"
+    },
+    {
       "source": "/app.js",
       "destination": "/outputs/app.js"
     },

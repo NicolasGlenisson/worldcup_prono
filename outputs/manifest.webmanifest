@@ -1,13 +1,14 @@
 {
   "name": "Pronos Coupe du Monde",
   "short_name": "Pronos CDM",
-  "start_url": "./index.html",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f5f1e8",
   "theme_color": "#0e1714",
   "icons": [
     {
-      "src": "./icon.svg",
+      "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

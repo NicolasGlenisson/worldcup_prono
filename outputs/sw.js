@@ -1,11 +1,10 @@
-const CACHE_NAME = "pronos-cdm-v29";
+const CACHE_NAME = "pronos-cdm-v30";
 const APP_SHELL = [
-  "./",
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icon.svg"
+  "/",
+  "/styles.css",
+  "/app.js",
+  "/manifest.webmanifest",
+  "/icon.svg"
 ];
 
 self.addEventListener("install", (event) => {
@@ -34,6 +33,6 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/")))
   );
 });
