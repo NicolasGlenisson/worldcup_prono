@@ -1741,7 +1741,7 @@ function buildLocalStatsPrompt(match) {
   const scopes = [stats.worldCup, stats.global].filter((scope) => scope.status === "ready");
   if (!scopes.length) return "Aucune statistique locale fiable disponible.";
 
-  const scopeText = scopes.map((scope) => {
+  return scopes.map((scope) => {
     const lines = [
       `${scope.title}: ${scope.note}`,
       formatTeamStatsPrompt(scope.home),
@@ -1750,11 +1750,6 @@ function buildLocalStatsPrompt(match) {
     ].filter(Boolean);
     return lines.join("\n");
   }).join("\n\n");
-  const algo = buildAlgorithmicPrediction(stats.global.status === "ready" ? stats.global : stats.worldCup);
-  const algoText = algo
-    ? `\n\nProno algo local sans IA: ${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}. Probabilités: ${algo.homeName} ${algo.homeWinPercent}%, nul ${algo.drawPercent}%, ${algo.awayName} ${algo.awayWinPercent}%. ${algo.confidenceLabel}.`
-    : "";
-  return `${scopeText}${algoText}`;
 }
 
 function formatTeamStatsPrompt(stats) {
