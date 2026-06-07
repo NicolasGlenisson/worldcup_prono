@@ -264,6 +264,29 @@ select {
   text-align: center;
 }
 
+.match-card-pronos {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid rgba(216, 210, 196, 0.58);
+  padding-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.match-card-pronos span {
+  overflow-wrap: anywhere;
+}
+
+.match-card-pronos strong {
+  color: var(--ink);
+}
+
+.match-card-pronos .muted {
+  opacity: 0.68;
+}
+
 .team-stack {
   display: grid;
   gap: 8px;

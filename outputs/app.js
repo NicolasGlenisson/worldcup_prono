@@ -637,9 +637,6 @@ function renderMatches() {
 function renderMatchCard(match) {
   const prediction = state.predictions[match.id];
   const statusBadge = renderStatusBadge(match.status);
-  const predictionBadge = prediction
-    ? `<span class="badge gold">Prono ${formatDateTime(prediction.generatedAt)}</span>`
-    : `<span class="badge muted">Sans prono</span>`;
 
   return `
     <button class="match-card" type="button" data-match-id="${escapeAttr(match.id)}">
@@ -648,11 +645,34 @@ function renderMatchCard(match) {
         ${statusBadge}
       </div>
       ${renderMatchScoreLine(match)}
+      ${renderMatchCardPredictions(match, prediction)}
       <div class="match-footer">
         <span>${escapeHtml(formatMatchDate(match))}</span>
-        ${predictionBadge}
+        ${prediction ? `<span class="badge gold">IA ${formatDateTime(prediction.generatedAt)}</span>` : `<span class="badge muted">Sans prono IA</span>`}
       </div>
     </button>
+  `;
+}
+
+function renderMatchCardPredictions(match, prediction) {
+  const matchStats = buildMatchStats(match);
+  const algoScope = matchStats.global.status === "ready" ? matchStats.global : matchStats.worldCup;
+  const algo = buildAlgorithmicPrediction(algoScope);
+  const iaScore = getPredictionScore(prediction);
+  const iaLabel = iaScore
+    ? `${match.homeName} ${iaScore.home} - ${iaScore.away} ${match.awayName}`
+    : prediction
+      ? "Score IA à lire dans l'analyse"
+      : "Pas encore de prono IA";
+  const algoLabel = algo
+    ? `${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}`
+    : "Prono algo indisponible";
+
+  return `
+    <div class="match-card-pronos">
+      <span><strong>Algo</strong> ${escapeHtml(algoLabel)}</span>
+      <span class="${prediction ? "" : "muted"}"><strong>IA</strong> ${escapeHtml(iaLabel)}</span>
+    </div>
   `;
 }
 
