@@ -19,6 +19,7 @@ const INTERNATIONAL_RESULTS_URL =
   "https://raw.githubusercontent.com/martj42/international_results/master/results.csv";
 const INTERNATIONAL_RESULTS_SIZE_LABEL = "3,55 Mio";
 const FIFA_RANKINGS = window.FIFA_RANKINGS || { teams: {} };
+const FORM_WINDOW = 5;
 
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
@@ -1024,8 +1025,8 @@ function buildMatchStats(match) {
       note: state.globalLastSync
         ? `Stats calculées depuis l’historique public des matchs internationaux. CSV actualisé le ${formatDateTime(state.globalLastSync)}.`
         : "Stats calculées depuis l’historique public des matchs internationaux.",
-      home: buildTeamStats(match.homeName, teamKey("", match.homeName), globalHomeMatches, { averageWindow: 10, summaryWindow: 10 }),
-      away: buildTeamStats(match.awayName, teamKey("", match.awayName), globalAwayMatches, { averageWindow: 10, summaryWindow: 10 }),
+      home: buildTeamStats(match.homeName, teamKey("", match.homeName), globalHomeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
+      away: buildTeamStats(match.awayName, teamKey("", match.awayName), globalAwayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
       headToHead: buildHeadToHeadStats(match.homeName, match.awayName, globalHeadToHead),
       groupRows: [],
       finishedCount: globalMatches.length,
@@ -1041,6 +1042,7 @@ function buildTeamStats(teamName, key, matches, options = {}) {
     .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   const recentMatches = ordered.slice(0, options.averageWindow || ordered.length);
   const summaryMatches = ordered.slice(0, options.summaryWindow || ordered.length);
+  const displayMatches = ordered.slice(0, options.displayWindow || options.averageWindow || ordered.length);
 
   const totals = summaryMatches.reduce((acc, match) => {
     const side = getTeamSide(match, key);
@@ -1065,13 +1067,14 @@ function buildTeamStats(teamName, key, matches, options = {}) {
     if (goalsFor === goalsAgainst) return "N";
     return "D";
   });
-  const recent = recentMatches.map((match) => buildTeamMatchLine(match, key)).filter(Boolean);
-  const recentTotals = recent.reduce((acc, item) => {
+  const recent = displayMatches.map((match) => buildTeamMatchLine(match, key)).filter(Boolean);
+  const averageRecent = recentMatches.map((match) => buildTeamMatchLine(match, key)).filter(Boolean);
+  const recentTotals = averageRecent.reduce((acc, item) => {
     acc.goalsFor += item.goalsFor;
     acc.goalsAgainst += item.goalsAgainst;
     return acc;
   }, { goalsFor: 0, goalsAgainst: 0 });
-  const averageSample = recent.length;
+  const averageSample = averageRecent.length;
 
   return {
     teamName,
@@ -1092,14 +1095,17 @@ function buildTeamMatchLine(match, key) {
   const goalsAgainst = side === "home" ? match.awayScore : match.homeScore;
   if (goalsFor === null || goalsAgainst === null) return null;
   const opponent = side === "home" ? match.awayName : match.homeName;
+  const teamName = side === "home" ? match.homeName : match.awayName;
   return {
     date: match.date,
-    teamName: side === "home" ? match.homeName : match.awayName,
+    teamName,
     homeName: match.homeName,
     awayName: match.awayName,
     homeScore: match.homeScore,
     awayScore: match.awayScore,
     opponent,
+    teamRanking: findFifaRanking(teamName),
+    opponentRanking: findFifaRanking(opponent),
     tournament: match.tournament || match.stage || "International",
     goalsFor,
     goalsAgainst,
@@ -1137,6 +1143,7 @@ function renderMatchStats(stats) {
   return `
     ${renderStatsScope(stats.worldCup)}
     ${renderStatsScope(stats.global)}
+    ${renderAlgorithmicPrediction(stats)}
   `;
 }
 
@@ -1203,6 +1210,135 @@ function renderStatsScope(scope) {
   `;
 }
 
+function renderAlgorithmicPrediction(stats) {
+  const scope = stats.global.status === "ready" ? stats.global : stats.worldCup;
+  const algo = buildAlgorithmicPrediction(scope);
+  if (!algo) {
+    return `
+      <section class="stats-panel algo-panel" aria-label="Prono algorithmique">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Sans IA</p>
+            <h3>Prono algo</h3>
+          </div>
+        </div>
+        <p class="micro-note">Pas assez de données récentes pour générer un prono algorithmique.</p>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="stats-panel algo-panel" aria-label="Prono algorithmique">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Sans IA</p>
+          <h3>Prono algo</h3>
+        </div>
+        <span class="badge gold">${escapeHtml(algo.confidenceLabel)}</span>
+      </div>
+      <div class="algo-score">
+        <span>${escapeHtml(algo.homeName)}</span>
+        <strong>${algo.homeGoals} - ${algo.awayGoals}</strong>
+        <span>${escapeHtml(algo.awayName)}</span>
+      </div>
+      <div class="algo-meter" aria-hidden="true">
+        <span style="width: ${algo.homeWinPercent}%"></span>
+      </div>
+      <div class="algo-probabilities">
+        <span>${escapeHtml(algo.homeName)} ${algo.homeWinPercent}%</span>
+        <span>Nul ${algo.drawPercent}%</span>
+        <span>${escapeHtml(algo.awayName)} ${algo.awayWinPercent}%</span>
+      </div>
+      <dl class="metric-list algo-metrics">
+        <div><dt>Score forme</dt><dd>${formatNumber(algo.homeRating)} / ${formatNumber(algo.awayRating)}</dd></div>
+        <div><dt>Attaque attendue</dt><dd>${formatNumber(algo.homeExpectedGoals)} / ${formatNumber(algo.awayExpectedGoals)}</dd></div>
+        <div><dt>Écart FIFA</dt><dd>${algo.fifaPointsDiff > 0 ? "+" : ""}${formatNumber(algo.fifaPointsDiff)} pts</dd></div>
+      </dl>
+      <ul class="compact-list">
+        ${algo.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+      </ul>
+    </section>
+  `;
+}
+
+function buildAlgorithmicPrediction(scope) {
+  if (scope.status !== "ready") return null;
+  const home = scope.home;
+  const away = scope.away;
+  if (!home.recent.length || !away.recent.length) return null;
+
+  const homeRanking = findFifaRanking(home.teamName);
+  const awayRanking = findFifaRanking(away.teamName);
+  const homeMetrics = buildAlgoTeamMetrics(home, awayRanking);
+  const awayMetrics = buildAlgoTeamMetrics(away, homeRanking);
+  const fifaPointsDiff = Number(homeRanking?.points || 0) - Number(awayRanking?.points || 0);
+  const fifaRankDiff = Number(awayRanking?.rank || 100) - Number(homeRanking?.rank || 100);
+  const fifaEdge = clamp(fifaPointsDiff / 80 + fifaRankDiff / 12, -2.2, 2.2);
+
+  const homeRating = homeMetrics.formScore + homeMetrics.attackScore - awayMetrics.defenseScore + homeMetrics.opponentStrength + fifaEdge;
+  const awayRating = awayMetrics.formScore + awayMetrics.attackScore - homeMetrics.defenseScore + awayMetrics.opponentStrength - fifaEdge;
+  const ratingDiff = homeRating - awayRating;
+  const totalGoalsBase = clamp((home.avgFor + away.avgFor + home.avgAgainst + away.avgAgainst) / 2, 1.4, 3.6);
+  const homeExpectedGoals = clamp((home.avgFor * 0.52) + (away.avgAgainst * 0.38) + 0.15 + fifaEdge * 0.12, 0.2, 4.2);
+  const awayExpectedGoals = clamp((away.avgFor * 0.52) + (home.avgAgainst * 0.38) - fifaEdge * 0.12, 0.2, 4.2);
+  const scaledHomeXg = clamp(homeExpectedGoals * (totalGoalsBase / Math.max(0.8, homeExpectedGoals + awayExpectedGoals)), 0, 5);
+  const scaledAwayXg = clamp(awayExpectedGoals * (totalGoalsBase / Math.max(0.8, homeExpectedGoals + awayExpectedGoals)), 0, 5);
+  const homeGoals = Math.max(0, Math.min(5, Math.round(scaledHomeXg + ratingDiff * 0.08)));
+  const awayGoals = Math.max(0, Math.min(5, Math.round(scaledAwayXg - ratingDiff * 0.08)));
+  const drawPercent = Math.round(clamp(28 - Math.abs(ratingDiff) * 3, 14, 32));
+  const decisivePercent = 100 - drawPercent;
+  const homeShare = clamp(0.5 + ratingDiff / 10, 0.18, 0.82);
+  const homeWinPercent = Math.round(decisivePercent * homeShare);
+  const awayWinPercent = 100 - drawPercent - homeWinPercent;
+  const confidence = clamp(Math.abs(ratingDiff) * 1.4 + Math.abs(fifaEdge) * 0.8 + Math.min(home.summarySample, away.summarySample) * 0.35, 3, 8.5);
+
+  return {
+    homeName: home.teamName,
+    awayName: away.teamName,
+    homeGoals,
+    awayGoals,
+    homeExpectedGoals: scaledHomeXg,
+    awayExpectedGoals: scaledAwayXg,
+    homeRating,
+    awayRating,
+    fifaPointsDiff,
+    homeWinPercent,
+    awayWinPercent,
+    drawPercent,
+    confidenceLabel: `Confiance ${formatNumber(confidence)}/10`,
+    reasons: buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff)
+  };
+}
+
+function buildAlgoTeamMetrics(stats, opponentRanking) {
+  const sample = Math.max(1, stats.summarySample || stats.recent.length);
+  const pointsPerMatch = (stats.won * 3 + stats.drawn) / sample;
+  const opponentStrength = averageOpponentStrength(stats.recent, opponentRanking);
+  return {
+    formScore: (pointsPerMatch - 1.35) * 1.2,
+    attackScore: (stats.avgFor - 1.25) * 0.9,
+    defenseScore: (stats.avgAgainst - 1.05) * 0.85,
+    opponentStrength
+  };
+}
+
+function averageOpponentStrength(recent, fallbackRanking) {
+  const values = recent.slice(0, FORM_WINDOW).map((match) => {
+    const points = Number(match.opponentRanking?.points || fallbackRanking?.points || 1500);
+    return clamp((points - 1500) / 220, -1.2, 1.4);
+  });
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff) {
+  return [
+    `${home.teamName}: ${home.won}V ${home.drawn}N ${home.lost}D sur ${home.summarySample} matchs, ${formatNumber(home.avgFor)} but(s) marqué(s) et ${formatNumber(home.avgAgainst)} encaissé(s) par match.`,
+    `${away.teamName}: ${away.won}V ${away.drawn}N ${away.lost}D sur ${away.summarySample} matchs, ${formatNumber(away.avgFor)} but(s) marqué(s) et ${formatNumber(away.avgAgainst)} encaissé(s) par match.`,
+    `Classement FIFA: ${home.teamName} ${formatFifaRanking(homeRanking)} contre ${away.teamName} ${formatFifaRanking(awayRanking)} (${fifaPointsDiff > 0 ? "+" : ""}${formatNumber(fifaPointsDiff)} pts).`,
+    `Force des adversaires récents: ${formatNumber(homeMetrics.opponentStrength)} pour ${home.teamName}, ${formatNumber(awayMetrics.opponentStrength)} pour ${away.teamName}.`
+  ];
+}
+
 function renderStatsInfoButton(scope) {
   return `
     <div class="info-popover-wrap">
@@ -1246,6 +1382,10 @@ function renderRecentMatches(stats) {
             <div>
               <small>${escapeHtml(formatShortDate(match.date))} - ${escapeHtml(match.tournament)}</small>
               <strong>${escapeHtml(match.homeName)} ${scoreText(match.homeScore)} - ${scoreText(match.awayScore)} ${escapeHtml(match.awayName)}</strong>
+              <span class="ranking-match-note">
+                ${escapeHtml(match.teamName)}: ${escapeHtml(formatFifaRanking(match.teamRanking))}
+                <span>Adversaire ${escapeHtml(match.opponent)}: ${escapeHtml(formatFifaRanking(match.opponentRanking))}</span>
+              </span>
             </div>
           </li>
         `).join("")}
@@ -1601,7 +1741,7 @@ function buildLocalStatsPrompt(match) {
   const scopes = [stats.worldCup, stats.global].filter((scope) => scope.status === "ready");
   if (!scopes.length) return "Aucune statistique locale fiable disponible.";
 
-  return scopes.map((scope) => {
+  const scopeText = scopes.map((scope) => {
     const lines = [
       `${scope.title}: ${scope.note}`,
       formatTeamStatsPrompt(scope.home),
@@ -1610,6 +1750,11 @@ function buildLocalStatsPrompt(match) {
     ].filter(Boolean);
     return lines.join("\n");
   }).join("\n\n");
+  const algo = buildAlgorithmicPrediction(stats.global.status === "ready" ? stats.global : stats.worldCup);
+  const algoText = algo
+    ? `\n\nProno algo local sans IA: ${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}. Probabilités: ${algo.homeName} ${algo.homeWinPercent}%, nul ${algo.drawPercent}%, ${algo.awayName} ${algo.awayWinPercent}%. ${algo.confidenceLabel}.`
+    : "";
+  return `${scopeText}${algoText}`;
 }
 
 function formatTeamStatsPrompt(stats) {
@@ -1975,6 +2120,10 @@ function firstNumber(...values) {
     if (Number.isFinite(number)) return number;
   }
   return null;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function numberOrDash(value) {
