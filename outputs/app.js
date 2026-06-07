@@ -18,6 +18,7 @@ const OPENFOOTBALL_FIXTURES =
 const INTERNATIONAL_RESULTS_URL =
   "https://raw.githubusercontent.com/martj42/international_results/master/results.csv";
 const INTERNATIONAL_RESULTS_SIZE_LABEL = "3,55 Mio";
+const FIFA_RANKINGS = window.FIFA_RANKINGS || { teams: {} };
 
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
@@ -1212,9 +1213,13 @@ function renderStatsInfoButton(scope) {
 }
 
 function renderTeamStats(stats) {
+  const ranking = findFifaRanking(stats.teamName);
   return `
     <article class="team-stat-card">
-      <h4>${escapeHtml(stats.teamName)}</h4>
+      <div class="team-card-heading">
+        <h4>${escapeHtml(stats.teamName)}</h4>
+        ${ranking ? `<span class="badge muted">${escapeHtml(formatFifaRanking(ranking))}</span>` : ""}
+      </div>
       <div class="form-row">${renderForm(stats.form)}</div>
       <dl class="metric-list">
         <div><dt>Bilan ${stats.summarySample ? `sur ${stats.summarySample}` : ""}</dt><dd>${stats.won}V ${stats.drawn}N ${stats.lost}D</dd></div>
@@ -1608,10 +1613,12 @@ function buildLocalStatsPrompt(match) {
 }
 
 function formatTeamStatsPrompt(stats) {
+  const ranking = findFifaRanking(stats.teamName);
   const recent = stats.recent.slice(0, 10).map((match) =>
     `  - ${formatShortDate(match.date)}: ${match.homeName} ${scoreText(match.homeScore)} - ${scoreText(match.awayScore)} ${match.awayName} (${match.tournament})`
   );
   return [
+    `Classement ${stats.teamName}: ${formatFifaRanking(ranking)}.`,
     `${stats.teamName}: bilan ${stats.won}V ${stats.drawn}N ${stats.lost}D sur ${stats.summarySample || 0} match(s), buts ${stats.goalsFor}-${stats.goalsAgainst}, moyennes ${formatNumber(stats.avgFor)} marqués / ${formatNumber(stats.avgAgainst)} encaissés.`,
     recent.length ? `10 derniers matchs:\n${recent.join("\n")}` : "Aucun match récent disponible."
   ].join("\n");
@@ -2019,6 +2026,24 @@ function findGroupRow(teamId, teamName) {
     if (row) return row;
   }
   return null;
+}
+
+function findFifaRanking(teamNameOrCode) {
+  const value = cleanName(teamNameOrCode);
+  if (!value) return null;
+  const byCode = FIFA_RANKINGS.teams?.[value.toUpperCase()];
+  if (byCode) return byCode;
+
+  const normalized = normalizeName(value);
+  return Object.values(FIFA_RANKINGS.teams || {}).find((ranking) => {
+    return normalizeName(ranking.name) === normalized || normalizeName(ranking.code) === normalized;
+  }) || null;
+}
+
+function formatFifaRanking(ranking) {
+  if (!ranking?.rank) return "Classement FIFA non disponible";
+  const points = Number.isFinite(Number(ranking.points)) ? ` - ${formatNumber(ranking.points)} pts` : "";
+  return `FIFA #${ranking.rank}${points}`;
 }
 
 function findGroupByName(groupName) {

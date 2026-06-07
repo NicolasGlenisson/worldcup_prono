@@ -1,8 +1,9 @@
-const CACHE_NAME = "pronos-cdm-v30";
+const CACHE_NAME = "pronos-cdm-v31";
 const APP_SHELL = [
   "/",
   "/styles.css",
   "/app.js",
+  "/fifa-rankings.js",
   "/manifest.webmanifest",
   "/icon.svg"
 ];

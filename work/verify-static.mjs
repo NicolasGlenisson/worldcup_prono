@@ -30,7 +30,7 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const { port } = server.address();
 
 try {
-  for (const path of ["/", "/styles.css", "/app.js", "/manifest.webmanifest", "/sw.js", "/icon.svg", "/server.mjs"]) {
+  for (const path of ["/", "/styles.css", "/app.js", "/fifa-rankings.js", "/manifest.webmanifest", "/sw.js", "/icon.svg", "/server.mjs"]) {
     const response = await fetch(`http://127.0.0.1:${port}${path}`);
     if (!response.ok) throw new Error(`${path} returned ${response.status}`);
     await response.text();

@@ -859,7 +859,18 @@ textarea {
   font-size: 14px;
   line-height: 1.2;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.team-card-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.team-card-heading h4 {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .form-row {
