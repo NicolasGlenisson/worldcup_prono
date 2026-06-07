@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1714" />
+    <meta name="description" content="Pronos personnels pour la Coupe du Monde." />
+    <title>Pronos Coupe du Monde</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Coupe du Monde</p>
+          <h1>Pronos</h1>
+        </div>
+        <button class="icon-button" id="refreshButton" type="button" aria-label="Actualiser les matchs" title="Actualiser">
+          <span aria-hidden="true">&#8635;</span>
+        </button>
+      </header>
+
+      <main>
+        <section class="status-band" id="statusBand">
+          <div>
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="sourceLabel">Chargement des matchs</span>
+          </div>
+          <span id="lastSyncLabel">--</span>
+        </section>
+
+        <section class="view active" id="matchesView" aria-labelledby="matchesTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Calendrier</p>
+              <h2 id="matchesTitle">Matchs</h2>
+            </div>
+            <select id="matchFilter" aria-label="Filtrer les matchs">
+              <option value="all">Tous</option>
+              <option value="upcoming">&Agrave; venir</option>
+              <option value="live">Live</option>
+              <option value="finished">Termin&eacute;s</option>
+              <option value="predicted">Avec prono</option>
+            </select>
+          </div>
+          <div class="match-list" id="matchList"></div>
+        </section>
+
+        <section class="view" id="matchView" aria-labelledby="matchPageTitle">
+          <div class="match-page-header">
+            <button class="secondary-button compact-button" id="matchBackButton" type="button">Retour</button>
+            <div>
+              <p class="eyebrow" id="matchPageStage">Match</p>
+              <h2 id="matchPageTitle">D&eacute;tail du match</h2>
+            </div>
+          </div>
+          <div class="match-page-body" id="matchPageBody"></div>
+        </section>
+
+        <section class="view" id="groupView" aria-labelledby="groupPageTitle">
+          <div class="match-page-header">
+            <button class="secondary-button compact-button" id="groupBackButton" type="button">Retour</button>
+            <div>
+              <p class="eyebrow">Groupe</p>
+              <h2 id="groupPageTitle">D&eacute;tail du groupe</h2>
+            </div>
+          </div>
+          <div class="match-page-body" id="groupPageBody"></div>
+        </section>
+
+        <section class="view" id="statsView" aria-labelledby="statsTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Infos</p>
+              <h2 id="statsTitle">Stats simples</h2>
+            </div>
+          </div>
+          <div class="stats-grid" id="statsGrid"></div>
+          <div class="groups-list" id="groupsList"></div>
+        </section>
+
+        <section class="view" id="settingsView" aria-labelledby="settingsTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Configuration</p>
+              <h2 id="settingsTitle">R&eacute;glages</h2>
+            </div>
+          </div>
+
+          <form class="settings-form" id="settingsForm">
+            <label>
+              <span>Prompt personnalis&eacute;</span>
+              <textarea id="customPrompt" name="customPrompt" rows="8"></textarea>
+            </label>
+            <div class="button-row">
+              <button class="primary-button" type="submit">Enregistrer</button>
+            </div>
+            <div class="settings-panel">
+              <div>
+                <p class="eyebrow">Stats globales</p>
+                <h3>Historique international</h3>
+                <p id="globalStatsInfo">Non synchronis&eacute;</p>
+              </div>
+              <button class="secondary-button" id="refreshGlobalStatsButton" type="button">Actualiser stats globales</button>
+            </div>
+            <button class="danger-button" id="clearPredictionsButton" type="button">Vider tous les pronos</button>
+          </form>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Navigation">
+        <button class="nav-button active" type="button" data-view="matchesView">
+          <span aria-hidden="true">&#9638;</span>
+          <span>Matchs</span>
+        </button>
+        <button class="nav-button" type="button" data-view="statsView">
+          <span aria-hidden="true">&#8801;</span>
+          <span>Stats</span>
+        </button>
+        <button class="nav-button" type="button" data-view="settingsView">
+          <span aria-hidden="true">&#9881;</span>
+          <span>R&eacute;glages</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
