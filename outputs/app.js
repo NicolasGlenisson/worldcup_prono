@@ -1319,18 +1319,18 @@ function buildAlgorithmicPrediction(scope) {
 
   const homeRanking = findFifaRanking(home.teamName);
   const awayRanking = findFifaRanking(away.teamName);
-  const homeMetrics = buildAlgoTeamMetrics(home, awayRanking);
-  const awayMetrics = buildAlgoTeamMetrics(away, homeRanking);
+  const homeMetrics = buildAlgoTeamMetrics(home, homeRanking, awayRanking);
+  const awayMetrics = buildAlgoTeamMetrics(away, awayRanking, homeRanking);
   const fifaPointsDiff = Number(homeRanking?.points || 0) - Number(awayRanking?.points || 0);
   const fifaRankDiff = Number(awayRanking?.rank || 100) - Number(homeRanking?.rank || 100);
-  const fifaEdge = clamp(fifaPointsDiff / 80 + fifaRankDiff / 12, -2.2, 2.2);
+  const fifaEdge = clamp(fifaPointsDiff / 180 + fifaRankDiff / 28, -1.15, 1.15);
 
   const homeRating = homeMetrics.formScore + homeMetrics.attackScore - awayMetrics.defenseScore + homeMetrics.opponentStrength + fifaEdge;
   const awayRating = awayMetrics.formScore + awayMetrics.attackScore - homeMetrics.defenseScore + awayMetrics.opponentStrength - fifaEdge;
   const ratingDiff = homeRating - awayRating;
-  const totalGoalsBase = clamp((home.avgFor + away.avgFor + home.avgAgainst + away.avgAgainst) / 2, 1.4, 3.6);
-  const homeExpectedGoals = clamp((home.avgFor * 0.52) + (away.avgAgainst * 0.38) + 0.15 + fifaEdge * 0.12, 0.2, 4.2);
-  const awayExpectedGoals = clamp((away.avgFor * 0.52) + (home.avgAgainst * 0.38) - fifaEdge * 0.12, 0.2, 4.2);
+  const totalGoalsBase = clamp((homeMetrics.weightedAvgFor + awayMetrics.weightedAvgFor + homeMetrics.weightedAvgAgainst + awayMetrics.weightedAvgAgainst) / 2, 1.4, 3.6);
+  const homeExpectedGoals = clamp((homeMetrics.weightedAvgFor * 0.52) + (awayMetrics.weightedAvgAgainst * 0.38) + 0.15 + fifaEdge * 0.08, 0.2, 4.2);
+  const awayExpectedGoals = clamp((awayMetrics.weightedAvgFor * 0.52) + (homeMetrics.weightedAvgAgainst * 0.38) - fifaEdge * 0.08, 0.2, 4.2);
   const scaledHomeXg = clamp(homeExpectedGoals * (totalGoalsBase / Math.max(0.8, homeExpectedGoals + awayExpectedGoals)), 0, 5);
   const scaledAwayXg = clamp(awayExpectedGoals * (totalGoalsBase / Math.max(0.8, homeExpectedGoals + awayExpectedGoals)), 0, 5);
   const homeGoals = Math.max(0, Math.min(5, Math.round(scaledHomeXg + ratingDiff * 0.08)));
@@ -1360,32 +1360,60 @@ function buildAlgorithmicPrediction(scope) {
   };
 }
 
-function buildAlgoTeamMetrics(stats, opponentRanking) {
-  const sample = Math.max(1, stats.summarySample || stats.recent.length);
-  const pointsPerMatch = (stats.won * 3 + stats.drawn) / sample;
-  const opponentStrength = averageOpponentStrength(stats.recent, opponentRanking);
+function buildAlgoTeamMetrics(stats, ownRanking, fallbackOpponentRanking) {
+  const weighted = buildWeightedRecentMetrics(stats.recent, ownRanking, fallbackOpponentRanking);
+  const pointsPerMatch = weighted.sample ? weighted.weightedPoints / weighted.sample : 0;
+  const weightedAvgFor = weighted.sample ? weighted.weightedGoalsFor / weighted.sample : stats.avgFor;
+  const weightedAvgAgainst = weighted.sample ? weighted.weightedGoalsAgainst / weighted.sample : stats.avgAgainst;
   return {
-    formScore: (pointsPerMatch - 1.35) * 1.2,
-    attackScore: (stats.avgFor - 1.25) * 0.9,
-    defenseScore: (stats.avgAgainst - 1.05) * 0.85,
-    opponentStrength
+    weightedPointsPerMatch: pointsPerMatch,
+    weightedAvgFor,
+    weightedAvgAgainst,
+    formScore: (pointsPerMatch - 1.25) * 1.35,
+    attackScore: (weightedAvgFor - 1.25) * 1.05,
+    defenseScore: (weightedAvgAgainst - 1.05) * 0.95,
+    opponentStrength: weighted.opponentStrength
   };
 }
 
-function averageOpponentStrength(recent, fallbackRanking) {
-  const values = recent.slice(0, FORM_WINDOW).map((match) => {
-    const points = Number(match.opponentRanking?.points || fallbackRanking?.points || 1500);
-    return clamp((points - 1500) / 220, -1.2, 1.4);
+function buildWeightedRecentMetrics(recent, ownRanking, fallbackOpponentRanking) {
+  const totals = recent.slice(0, FORM_WINDOW).reduce((acc, match) => {
+    const teamPoints = Number(match.teamRanking?.points || ownRanking?.points || 1500);
+    const opponentPoints = Number(match.opponentRanking?.points || fallbackOpponentRanking?.points || 1500);
+    const relativeStrength = clamp((opponentPoints - teamPoints) / 260, -0.9, 0.9);
+    const resultWeight = clamp(1 + relativeStrength * 0.38, 0.68, 1.34);
+    const goalForWeight = clamp(1 + relativeStrength * 0.48, 0.62, 1.46);
+    const goalAgainstWeight = clamp(1 - relativeStrength * 0.38, 0.66, 1.42);
+    const resultPoints = match.result === "V" ? 3 : match.result === "N" ? 1 : 0;
+    const weakLossPenalty = match.result === "D" ? clamp(-relativeStrength * 0.45, 0, 0.45) : 0;
+
+    acc.sample += 1;
+    acc.weightedPoints += Math.max(0, resultPoints * resultWeight - weakLossPenalty);
+    acc.weightedGoalsFor += match.goalsFor * goalForWeight;
+    acc.weightedGoalsAgainst += match.goalsAgainst * goalAgainstWeight;
+    acc.opponentStrength += clamp((opponentPoints - 1500) / 220, -1.2, 1.4);
+    return acc;
+  }, {
+    sample: 0,
+    weightedPoints: 0,
+    weightedGoalsFor: 0,
+    weightedGoalsAgainst: 0,
+    opponentStrength: 0
   });
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+
+  if (totals.sample) {
+    totals.opponentStrength /= totals.sample;
+  }
+  return totals;
 }
 
 function buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff) {
   return [
-    `${home.teamName}: ${home.won}V ${home.drawn}N ${home.lost}D sur ${home.summarySample} matchs, ${formatNumber(home.avgFor)} but(s) marqué(s) et ${formatNumber(home.avgAgainst)} encaissé(s) par match.`,
-    `${away.teamName}: ${away.won}V ${away.drawn}N ${away.lost}D sur ${away.summarySample} matchs, ${formatNumber(away.avgFor)} but(s) marqué(s) et ${formatNumber(away.avgAgainst)} encaissé(s) par match.`,
-    `Classement FIFA: ${home.teamName} ${formatFifaRanking(homeRanking)} contre ${away.teamName} ${formatFifaRanking(awayRanking)} (${fifaPointsDiff > 0 ? "+" : ""}${formatNumber(fifaPointsDiff)} pts).`,
-    `Force des adversaires récents: ${formatNumber(homeMetrics.opponentStrength)} pour ${home.teamName}, ${formatNumber(awayMetrics.opponentStrength)} pour ${away.teamName}.`
+    `${home.teamName}: ${home.won}V ${home.drawn}N ${home.lost}D sur ${home.summarySample} matchs, forme ponderee ${formatNumber(homeMetrics.weightedPointsPerMatch)} pt/match.`,
+    `${away.teamName}: ${away.won}V ${away.drawn}N ${away.lost}D sur ${away.summarySample} matchs, forme ponderee ${formatNumber(awayMetrics.weightedPointsPerMatch)} pt/match.`,
+    `Buts ponderes: ${home.teamName} ${formatNumber(homeMetrics.weightedAvgFor)} marques / ${formatNumber(homeMetrics.weightedAvgAgainst)} encaisses, ${away.teamName} ${formatNumber(awayMetrics.weightedAvgFor)} / ${formatNumber(awayMetrics.weightedAvgAgainst)}.`,
+    `Classement FIFA utilise comme bonus secondaire: ${home.teamName} ${formatFifaRanking(homeRanking)} contre ${away.teamName} ${formatFifaRanking(awayRanking)} (${fifaPointsDiff > 0 ? "+" : ""}${formatNumber(fifaPointsDiff)} pts).`,
+    `Force des adversaires recents: ${formatNumber(homeMetrics.opponentStrength)} pour ${home.teamName}, ${formatNumber(awayMetrics.opponentStrength)} pour ${away.teamName}.`
   ];
 }
 
