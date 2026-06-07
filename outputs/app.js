@@ -146,6 +146,8 @@ const state = {
   settings: readJson(STORAGE_KEYS.settings, DEFAULT_SETTINGS),
   predictions: readJson(STORAGE_KEYS.predictions, {}),
   predictionDraft: null,
+  algoPredictionCache: new Map(),
+  globalMatchesByTeam: new Map(),
   selectedMatchId: null,
   currentView: "matchesView"
 };
@@ -337,15 +339,18 @@ async function hydrateGlobalResultsFromCache() {
       state.globalMatches = parseInternationalResults(cached.csv);
       state.globalLastSync = cached.lastSync || null;
       state.globalStatsStatus = "ready";
+      rebuildGlobalMatchesIndex();
     } else {
       state.globalMatches = [];
       state.globalLastSync = null;
       state.globalStatsStatus = "empty";
+      rebuildGlobalMatchesIndex();
     }
   } catch {
     state.globalMatches = [];
     state.globalLastSync = null;
     state.globalStatsStatus = "empty";
+    rebuildGlobalMatchesIndex();
   }
   render();
 }
@@ -359,6 +364,7 @@ async function loadGlobalResults({ silent = false } = {}) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const csv = await response.text();
     state.globalMatches = parseInternationalResults(csv);
+    rebuildGlobalMatchesIndex();
     state.globalStatsStatus = "ready";
     state.globalLastSync = new Date().toISOString();
     render();
@@ -655,9 +661,7 @@ function renderMatchCard(match) {
 }
 
 function renderMatchCardPredictions(match, prediction) {
-  const matchStats = buildMatchStats(match);
-  const algoScope = matchStats.global.status === "ready" ? matchStats.global : matchStats.worldCup;
-  const algo = buildAlgorithmicPrediction(algoScope);
+  const algo = getMatchCardAlgoPrediction(match);
   const iaScore = getPredictionScore(prediction);
   const iaLabel = iaScore
     ? `${match.homeName} ${iaScore.home} - ${iaScore.away} ${match.awayName}`
@@ -674,6 +678,32 @@ function renderMatchCardPredictions(match, prediction) {
       <span class="${prediction ? "" : "muted"}"><strong>IA</strong> ${escapeHtml(iaLabel)}</span>
     </div>
   `;
+}
+
+function getMatchCardAlgoPrediction(match) {
+  if (state.globalStatsStatus !== "ready") return null;
+  const cacheKey = `${match.id}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
+  if (state.algoPredictionCache.has(cacheKey)) return state.algoPredictionCache.get(cacheKey);
+  const scope = buildFastGlobalStatsScope(match);
+  const algo = buildAlgorithmicPrediction(scope);
+  state.algoPredictionCache.set(cacheKey, algo);
+  return algo;
+}
+
+function buildFastGlobalStatsScope(match) {
+  const homeMatches = getIndexedHistoricalMatchesBefore(match.homeName, match.date);
+  const awayMatches = getIndexedHistoricalMatchesBefore(match.awayName, match.date);
+  return {
+    title: "Tout compris",
+    note: "Stats calculées depuis l'historique public des matchs internationaux.",
+    home: buildTeamStats(match.homeName, teamKey("", match.homeName), homeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
+    away: buildTeamStats(match.awayName, teamKey("", match.awayName), awayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
+    headToHead: { played: 0, homeWins: 0, draws: 0, awayWins: 0, goals: 0, avgGoals: 0, latest: [] },
+    groupRows: [],
+    finishedCount: state.globalMatches.length,
+    headToHeadCount: 0,
+    status: state.globalStatsStatus
+  };
 }
 
 function renderMatchScoreLine(match) {
@@ -2163,6 +2193,31 @@ function teamKey(id, name) {
 function getHistoricalMatchesBefore(match) {
   const cutoff = match.date ? new Date(match.date).getTime() : Date.now();
   return state.globalMatches.filter((item) => new Date(item.date).getTime() < cutoff);
+}
+
+function rebuildGlobalMatchesIndex() {
+  state.algoPredictionCache.clear();
+  state.globalMatchesByTeam = new Map();
+  for (const match of state.globalMatches) {
+    addGlobalMatchToIndex(match.homeName, match);
+    addGlobalMatchToIndex(match.awayName, match);
+  }
+  for (const matches of state.globalMatchesByTeam.values()) {
+    matches.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  }
+}
+
+function addGlobalMatchToIndex(teamName, match) {
+  const key = normalizeName(teamName);
+  if (!key) return;
+  if (!state.globalMatchesByTeam.has(key)) state.globalMatchesByTeam.set(key, []);
+  state.globalMatchesByTeam.get(key).push(match);
+}
+
+function getIndexedHistoricalMatchesBefore(teamName, date) {
+  const cutoff = date ? new Date(date).getTime() : Date.now();
+  const matches = state.globalMatchesByTeam.get(normalizeName(teamName)) || [];
+  return matches.filter((item) => new Date(item.date || 0).getTime() < cutoff).slice(0, 12);
 }
 
 function matchIncludesTeamName(match, teamName) {
