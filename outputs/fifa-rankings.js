@@ -781,7 +781,17 @@ window.FIFA_RANKINGS = {
         "DR Congo",
         "COD",
         "Democratic Republic of the Congo",
-        "Congo DR"
+        "Democratic Republic of Congo",
+        "The Democratic Republic of the Congo",
+        "The Democratic Republic of Congo",
+        "Congo DR",
+        "Congo, DR",
+        "Congo Democratic Republic",
+        "Dem. Rep. Congo",
+        "Dem Rep Congo",
+        "DRC",
+        "République démocratique du Congo",
+        "Rép. dém. Congo"
       ],
       "lastUpdateDate": "2026-06-08T00:00:00+02:00",
       "sourceUrl": "https://inside.fifa.com/en/fifa-world-ranking/COD?gender=men"
