@@ -1,4 +1,4 @@
-const CACHE_NAME = "pronos-cdm-v61";
+const CACHE_NAME = "pronos-cdm-v62";
 const APP_SHELL = [
   "/",
   "/styles.css",

@@ -180,6 +180,17 @@ select {
   padding: 0 10px;
 }
 
+.match-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.match-filters select {
+  max-width: 190px;
+}
+
 .match-list,
 .groups-list,
 .stats-grid {
@@ -1449,6 +1460,20 @@ textarea {
 }
 
 @media (max-width: 520px) {
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .match-filters {
+    justify-content: stretch;
+  }
+
+  .match-filters select {
+    flex: 1 1 150px;
+    max-width: none;
+  }
+
   .prono-summary-grid {
     grid-template-columns: 1fr;
   }

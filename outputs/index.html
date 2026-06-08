@@ -36,13 +36,18 @@
               <p class="eyebrow">Calendrier</p>
               <h2 id="matchesTitle">Matchs</h2>
             </div>
-            <select id="matchFilter" aria-label="Filtrer les matchs">
-              <option value="all">Tous</option>
-              <option value="upcoming">&Agrave; venir</option>
-              <option value="live">Live</option>
-              <option value="finished">Termin&eacute;s</option>
-              <option value="predicted">Avec prono</option>
-            </select>
+            <div class="match-filters">
+              <select id="matchFilter" aria-label="Filtrer les matchs par statut">
+                <option value="all">Tous</option>
+                <option value="upcoming">&Agrave; venir</option>
+                <option value="live">Live</option>
+                <option value="finished">Termin&eacute;s</option>
+                <option value="predicted">Avec prono</option>
+              </select>
+              <select id="matchScopeFilter" aria-label="Filtrer les matchs par groupe ou phase">
+                <option value="all">Tous groupes/phases</option>
+              </select>
+            </div>
           </div>
           <div class="match-list" id="matchList"></div>
         </section>

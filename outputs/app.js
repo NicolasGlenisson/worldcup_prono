@@ -224,6 +224,7 @@ const els = {
   lastSyncLabel: document.querySelector("#lastSyncLabel"),
   statusDot: document.querySelector(".status-dot"),
   matchFilter: document.querySelector("#matchFilter"),
+  matchScopeFilter: document.querySelector("#matchScopeFilter"),
   matchList: document.querySelector("#matchList"),
   statsGrid: document.querySelector("#statsGrid"),
   groupsList: document.querySelector("#groupsList"),
@@ -270,6 +271,7 @@ function bindEvents() {
   els.refreshButton.addEventListener("click", () => loadTournamentData({ force: true }));
   els.refreshGlobalStatsButton.addEventListener("click", () => loadGlobalResults({ force: true }));
   els.matchFilter.addEventListener("change", renderMatches);
+  els.matchScopeFilter.addEventListener("change", renderMatches);
   els.matchBackButton.addEventListener("click", () => goBack("matchesView"));
   els.groupBackButton.addEventListener("click", () => goBack("statsView"));
   window.addEventListener("hashchange", handleRoute);
@@ -775,6 +777,7 @@ function normalizeStatus(rawStatus, score, date) {
 
 function render() {
   renderStatus();
+  renderMatchScopeFilter();
   renderMatches();
   renderStats();
   hydrateSettingsForm();
@@ -805,10 +808,12 @@ function renderStatus() {
 
 function renderMatches() {
   const filter = els.matchFilter.value;
+  const scopeFilter = els.matchScopeFilter.value;
   const matches = state.matches.filter((match) => {
-    if (filter === "all") return true;
-    if (filter === "predicted") return Boolean(state.predictions[match.id]);
-    return match.status === filter;
+    const statusMatches = filter === "all"
+      || (filter === "predicted" ? Boolean(state.predictions[match.id]) : match.status === filter);
+    const scopeMatches = scopeFilter === "all" || getMatchScopeFilterValue(match) === scopeFilter;
+    return statusMatches && scopeMatches;
   });
 
   if (!matches.length) {
@@ -820,6 +825,52 @@ function renderMatches() {
   els.matchList.querySelectorAll(".match-card").forEach((card) => {
     card.addEventListener("click", () => navigateToMatch(card.dataset.matchId));
   });
+}
+
+function renderMatchScopeFilter() {
+  const currentValue = els.matchScopeFilter.value || "all";
+  const options = buildMatchScopeFilterOptions();
+  els.matchScopeFilter.innerHTML = [
+    `<option value="all">Tous groupes/phases</option>`,
+    ...options.map((option) => `<option value="${escapeAttr(option.value)}">${escapeHtml(option.label)}</option>`)
+  ].join("");
+  els.matchScopeFilter.value = options.some((option) => option.value === currentValue) ? currentValue : "all";
+}
+
+function buildMatchScopeFilterOptions() {
+  const groups = new Map();
+  const phases = new Map();
+  state.matches.forEach((match) => {
+    const scope = getMatchScopeFilter(match);
+    if (!scope.value) return;
+    const target = scope.type === "group" ? groups : phases;
+    if (!target.has(scope.value)) target.set(scope.value, scope);
+  });
+  return [
+    ...Array.from(groups.values()).sort((a, b) => normalizeGroupName(a.label).localeCompare(normalizeGroupName(b.label), "fr", { numeric: true })),
+    ...Array.from(phases.values()).sort((a, b) => a.label.localeCompare(b.label, "fr", { numeric: true, sensitivity: "base" }))
+  ];
+}
+
+function getMatchScopeFilterValue(match) {
+  return getMatchScopeFilter(match).value;
+}
+
+function getMatchScopeFilter(match) {
+  const group = cleanName(match?.group);
+  const stage = cleanName(match?.stage);
+  if (group) {
+    const label = formatGroupLabel(group);
+    return { type: "group", label, value: `group:${normalizeGroupName(label)}` };
+  }
+  if (/^[A-Z]$/i.test(stage) || /^group\s+/i.test(stage) || /^groupe\s+/i.test(stage)) {
+    const label = formatGroupLabel(stage);
+    return { type: "group", label, value: `group:${normalizeGroupName(label)}` };
+  }
+  if (stage) {
+    return { type: "phase", label: stage, value: `phase:${normalizeStageName(stage)}` };
+  }
+  return { type: "phase", label: "Match", value: "phase:match" };
 }
 
 function renderMatchCard(match) {
@@ -2854,6 +2905,15 @@ function groupNamesEqual(a, b) {
 
 function normalizeGroupName(value) {
   return cleanName(value).toLowerCase().replace(/^groupe\s+/, "").replace(/^group\s+/, "").trim();
+}
+
+function normalizeStageName(value) {
+  return cleanName(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function namesEqual(a, b) {
