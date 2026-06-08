@@ -1312,7 +1312,6 @@ function renderStatsScope(scope) {
         ${renderTeamStats(scope.home)}
         ${renderTeamStats(scope.away)}
       </div>
-      ${scope.groupRows.length ? renderGroupSnapshot(scope.groupRows) : ""}
       ${renderHeadToHead(scope.headToHead)}
     </section>
   `;
