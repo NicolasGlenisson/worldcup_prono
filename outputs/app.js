@@ -716,6 +716,10 @@ function renderMatchScoreLine(match) {
   `;
 }
 
+function formatMatchScoreLabel(match) {
+  return `${match.homeName} ${scoreText(match.homeScore)} - ${scoreText(match.awayScore)} ${match.awayName}`;
+}
+
 function renderStats() {
   const total = state.matches.length;
   const finished = state.matches.filter((match) => match.status === "finished").length;
@@ -967,8 +971,7 @@ function renderMatchDetail(match, prediction) {
   const action = `<button class="primary-button" id="predictionPromptButton" type="button">${prediction ? "Préparer un nouveau prompt" : "Préparer le prompt ChatGPT"}</button>`;
 
   return `
-    ${renderPredictionSummary(match, prediction)}
-    ${renderMatchScoreLine(match)}
+    ${renderMatchTopSummary(match, prediction, matchStats)}
     <div class="tag-row">
       ${renderStatusBadge(match.status)}
       ${match.group ? `<button class="badge-link" id="matchGroupButton" type="button">Groupe ${escapeHtml(match.group)}</button>` : ""}
@@ -1009,12 +1012,32 @@ function renderManualPredictionComposer(match) {
   `;
 }
 
-function renderPredictionSummary(match, prediction) {
+function renderMatchTopSummary(match, prediction, matchStats) {
+  const algo = getAlgorithmicPredictionFromStats(matchStats);
+  return `
+    <section class="match-score-summary" aria-label="Scores du match">
+      <div class="score-summary-card real-score-summary">
+        <div>
+          <p class="eyebrow">Score réel</p>
+          <h3>${escapeHtml(formatMatchScoreLabel(match))}</h3>
+          <small>${escapeHtml(formatMatchDate(match))}</small>
+        </div>
+        ${renderStatusBadge(match.status)}
+      </div>
+      <div class="prono-summary-grid">
+        ${renderIaPredictionSummary(match, prediction)}
+        ${renderAlgoPredictionSummary(algo)}
+      </div>
+    </section>
+  `;
+}
+
+function renderIaPredictionSummary(match, prediction) {
   if (!prediction) {
     return `
-      <div class="prediction-summary empty">
+      <div class="score-summary-card prediction-summary empty">
         <div>
-          <p class="eyebrow">Prono IA</p>
+          <p class="eyebrow">Score prono IA</p>
           <h3>Aucun prono</h3>
         </div>
         <span class="badge muted">Non généré</span>
@@ -1026,21 +1049,49 @@ function renderPredictionSummary(match, prediction) {
   const confidence = getPredictionConfidence(prediction);
   const label = predictedScore
     ? `${match.homeName} ${predictedScore.home} - ${predictedScore.away} ${match.awayName}`
-    : "Score prono à lire dans l’analyse";
+    : "Score prono à lire dans l'analyse";
   const meta = [
     `Généré le ${formatDateTime(prediction.generatedAt)}`,
     confidence ? `Confiance ${confidence}/10` : ""
   ].filter(Boolean).join(" · ");
 
   return `
-    <button class="prediction-summary" id="predictionSummaryButton" type="button">
+    <button class="score-summary-card prediction-summary" id="predictionSummaryButton" type="button">
       <div>
-        <p class="eyebrow">Score prono</p>
+        <p class="eyebrow">Score prono IA</p>
         <h3>${escapeHtml(label)}</h3>
         <small>${escapeHtml(meta)}</small>
       </div>
       <span class="badge gold">Voir analyse</span>
     </button>
+  `;
+}
+
+function renderAlgoPredictionSummary(algo) {
+  if (!algo) {
+    return `
+      <div class="score-summary-card prediction-summary empty">
+        <div>
+          <p class="eyebrow">Score prono algo</p>
+          <h3>Indisponible</h3>
+          <small>Stats insuffisantes</small>
+        </div>
+        <span class="badge muted">Sans IA</span>
+      </div>
+    `;
+  }
+
+  const label = `${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}`;
+  const meta = `${algo.confidenceLabel} · ${algo.homeWinPercent}% / ${algo.drawPercent}% / ${algo.awayWinPercent}%`;
+  return `
+    <div class="score-summary-card prediction-summary algo-summary">
+      <div>
+        <p class="eyebrow">Score prono algo</p>
+        <h3>${escapeHtml(label)}</h3>
+        <small>${escapeHtml(meta)}</small>
+      </div>
+      <span class="badge gold">Sans IA</span>
+    </div>
   `;
 }
 
@@ -1261,8 +1312,7 @@ function renderStatsScope(scope) {
 }
 
 function renderAlgorithmicPrediction(stats) {
-  const scope = stats.global.status === "ready" ? stats.global : stats.worldCup;
-  const algo = buildAlgorithmicPrediction(scope);
+  const algo = getAlgorithmicPredictionFromStats(stats);
   if (!algo) {
     return `
       <section class="stats-panel algo-panel" aria-label="Prono algorithmique">
@@ -1309,6 +1359,11 @@ function renderAlgorithmicPrediction(stats) {
       </ul>
     </section>
   `;
+}
+
+function getAlgorithmicPredictionFromStats(stats) {
+  const scope = stats.global.status === "ready" ? stats.global : stats.worldCup;
+  return buildAlgorithmicPrediction(scope);
 }
 
 function buildAlgorithmicPrediction(scope) {
