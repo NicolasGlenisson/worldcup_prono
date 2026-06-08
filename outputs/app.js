@@ -654,7 +654,7 @@ function renderMatchCard(match) {
       ${renderMatchCardPredictions(match, prediction)}
       <div class="match-footer">
         <span>${escapeHtml(formatMatchDate(match))}</span>
-        ${prediction ? `<span class="badge gold">IA ${formatDateTime(prediction.generatedAt)}</span>` : `<span class="badge muted">Sans prono IA</span>`}
+        ${prediction ? `<span class="badge gold">IA ${formatShortDate(prediction.generatedAt)}</span>` : ""}
       </div>
     </button>
   `;
