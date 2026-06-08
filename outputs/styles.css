@@ -586,8 +586,14 @@ textarea {
 }
 
 .real-score-summary {
+  justify-content: center;
   border: 1px solid rgba(16, 122, 95, 0.24);
   background: rgba(16, 122, 95, 0.08);
+  text-align: center;
+}
+
+.real-score-summary > div {
+  flex: 0 1 auto;
 }
 
 .real-score-summary h3,
