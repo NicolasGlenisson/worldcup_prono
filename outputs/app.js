@@ -2564,7 +2564,11 @@ function findFifaRanking(teamNameOrCode) {
 
   const normalized = normalizeName(value);
   return Object.values(FIFA_RANKINGS.teams || {}).find((ranking) => {
-    return normalizeName(ranking.name) === normalized || normalizeName(ranking.code) === normalized;
+    const aliases = Array.isArray(ranking.aliases) ? ranking.aliases : [];
+    return normalizeName(ranking.name) === normalized
+      || normalizeName(ranking.nameFr) === normalized
+      || normalizeName(ranking.code) === normalized
+      || aliases.some((alias) => normalizeName(alias) === normalized);
   }) || null;
 }
 
