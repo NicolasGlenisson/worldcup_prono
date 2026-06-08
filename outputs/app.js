@@ -45,9 +45,9 @@ const HOST_CITY_TIME_ZONES = {
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
   predictions: "cdm_pronos_predictions_v1",
-  cache: "cdm_pronos_match_cache_v2"
+  cache: "cdm_pronos_match_cache_v3"
 };
-const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1"];
+const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2"];
 
 const GLOBAL_RESULTS_CACHE = {
   dbName: "cdm_pronos_large_cache_v1",
@@ -478,7 +478,7 @@ function normalizeWorldCup26Matches(raw, teamLookup = new Map()) {
     const dateValue = item.datetime || item.date_time || item.kickoff || item.start_at || item.startTime || item.date;
     const localDateValue = item.local_date || item.localDate;
     const timeValue = item.time || item.hour || item.match_time;
-    const sourceTimeZone = getMatchSourceTimeZone(item);
+    const sourceTimeZone = getMatchSourceTimeZone(item, homeName, awayName);
     const preferredDateValue = dateValue || localDateValue;
     const date = parseMatchDate(preferredDateValue, timeValue, sourceTimeZone);
     const statusText = [item.status, item.state, item.match_status, item.finished, item.time_elapsed].filter(Boolean).join(" ");
@@ -597,9 +597,15 @@ function readVenue(item) {
   return [stadium.name || stadium.title, stadium.city || item.city].filter(Boolean).join(", ");
 }
 
-function getMatchSourceTimeZone(item) {
+function getMatchSourceTimeZone(item, homeName = "", awayName = "") {
   const explicit = item.timezone || item.time_zone || item.tz;
   if (explicit) return String(explicit);
+  const matchNumber = String(item.id || item.match_id || item.game_id || item.number || item.matchNumber || "");
+  const matchup = `${normalizeName(homeName)} ${normalizeName(awayName)}`;
+  if (matchNumber === "1" || (matchup.includes("mexico") && matchup.includes("south africa"))) {
+    return "America/Mexico_City";
+  }
+
   const stadium = item.stadium || item.venue || item.location || item.ground || {};
   const candidates = [
     item.city,
