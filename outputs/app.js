@@ -66,6 +66,7 @@ const STORAGE_KEYS = {
   algoPredictions: "cdm_pronos_algo_predictions_v1",
   cache: "cdm_pronos_match_cache_v5"
 };
+const ALGO_FORMULA_VERSION = "2026-06-08-v2";
 const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2", "cdm_pronos_match_cache_v3", "cdm_pronos_match_cache_v4"];
 
 const GLOBAL_RESULTS_CACHE = {
@@ -247,6 +248,7 @@ boot();
 
 function boot() {
   clearLegacyMatchCaches();
+  clearStaleAlgorithmicPredictions();
   bindEvents();
   hydrateSettingsForm();
   render();
@@ -264,6 +266,18 @@ function clearLegacyMatchCaches() {
       console.warn("Impossible de nettoyer l'ancien cache match", error);
     }
   });
+}
+
+function clearStaleAlgorithmicPredictions() {
+  let changed = false;
+  for (const [matchId, frozen] of Object.entries(state.algoPredictions)) {
+    if (frozen?.formulaVersion === ALGO_FORMULA_VERSION) continue;
+    delete state.algoPredictions[matchId];
+    changed = true;
+  }
+  if (changed) {
+    writeJson(STORAGE_KEYS.algoPredictions, state.algoPredictions);
+  }
 }
 
 function bindEvents() {
@@ -292,6 +306,7 @@ function bindEvents() {
   els.clearPredictionsButton.addEventListener("click", () => {
     state.predictions = {};
     state.algoPredictions = {};
+    state.algoPredictionCache.clear();
     writeJson(STORAGE_KEYS.predictions, state.predictions);
     writeJson(STORAGE_KEYS.algoPredictions, state.algoPredictions);
     render();
@@ -865,7 +880,7 @@ function getMatchCardAlgoPrediction(match) {
   const frozen = getFrozenAlgorithmicPrediction(match);
   if (frozen) return frozen.algo;
   if (state.globalStatsStatus !== "ready") return null;
-  const cacheKey = `${match.id}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
+  const cacheKey = `${ALGO_FORMULA_VERSION}:${match.id}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
   if (state.algoPredictionCache.has(cacheKey)) return state.algoPredictionCache.get(cacheKey);
   const scope = buildFastGlobalStatsScope(match);
   const algo = buildAlgorithmicPrediction(scope);
@@ -1570,6 +1585,7 @@ function getAlgorithmicPredictionFromStats(stats) {
 function getFrozenAlgorithmicPrediction(match) {
   if (!match?.id) return null;
   const frozen = state.algoPredictions[match.id];
+  if (frozen?.formulaVersion !== ALGO_FORMULA_VERSION) return null;
   return frozen?.algo ? frozen : null;
 }
 
@@ -1603,6 +1619,7 @@ function buildFrozenAlgorithmicPrediction(match) {
     frozenAt: new Date().toISOString(),
     matchStatus: match.status,
     source: stats.global.status === "ready" ? "global" : "worldCup",
+    formulaVersion: ALGO_FORMULA_VERSION,
     algo
   };
 }
