@@ -663,19 +663,13 @@ function renderMatchCard(match) {
 function renderMatchCardPredictions(match, prediction) {
   const algo = getMatchCardAlgoPrediction(match);
   const iaScore = getPredictionScore(prediction);
-  const iaLabel = iaScore
-    ? `${match.homeName} ${iaScore.home} - ${iaScore.away} ${match.awayName}`
-    : prediction
-      ? "Score IA à lire dans l'analyse"
-      : "Pas encore de prono IA";
-  const algoLabel = algo
-    ? `${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}`
-    : "Prono algo indisponible";
+  const iaLabel = iaScore ? `${iaScore.home} - ${iaScore.away}` : prediction ? "À lire" : "Sans IA";
+  const algoLabel = algo ? `${algo.homeGoals} - ${algo.awayGoals}` : "Indispo";
 
   return `
     <div class="match-card-pronos">
-      <span><strong>Algo</strong> ${escapeHtml(algoLabel)}</span>
-      <span class="${prediction ? "" : "muted"}"><strong>IA</strong> ${escapeHtml(iaLabel)}</span>
+      <span class="match-card-prono ${algo ? "has-score" : "muted"}"><strong>Algo</strong> ${escapeHtml(algoLabel)}</span>
+      <span class="match-card-prono ${prediction ? "has-score" : "muted"}"><strong>IA</strong> ${escapeHtml(iaLabel)}</span>
     </div>
   `;
 }
