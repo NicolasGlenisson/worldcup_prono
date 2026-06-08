@@ -41,13 +41,31 @@ const HOST_CITY_TIME_ZONES = {
   "toronto": "America/Toronto",
   "vancouver": "America/Vancouver"
 };
+const STADIUM_TIME_ZONES = {
+  "1": "America/Mexico_City",
+  "2": "America/Mexico_City",
+  "3": "America/Mexico_City",
+  "4": "America/Chicago",
+  "5": "America/Chicago",
+  "6": "America/Chicago",
+  "7": "America/New_York",
+  "8": "America/New_York",
+  "9": "America/New_York",
+  "10": "America/New_York",
+  "11": "America/New_York",
+  "12": "America/Toronto",
+  "13": "America/Vancouver",
+  "14": "America/Los_Angeles",
+  "15": "America/Los_Angeles",
+  "16": "America/Los_Angeles"
+};
 
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
   predictions: "cdm_pronos_predictions_v1",
-  cache: "cdm_pronos_match_cache_v4"
+  cache: "cdm_pronos_match_cache_v5"
 };
-const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2", "cdm_pronos_match_cache_v3"];
+const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2", "cdm_pronos_match_cache_v3", "cdm_pronos_match_cache_v4"];
 
 const GLOBAL_RESULTS_CACHE = {
   dbName: "cdm_pronos_large_cache_v1",
@@ -600,6 +618,9 @@ function readVenue(item) {
 function getMatchSourceTimeZone(item, homeName = "", awayName = "") {
   const explicit = item.timezone || item.time_zone || item.tz;
   if (explicit) return String(explicit);
+  const stadiumId = String(item.stadium_id || item.stadiumId || item.venue_id || item.venueId || "");
+  if (STADIUM_TIME_ZONES[stadiumId]) return STADIUM_TIME_ZONES[stadiumId];
+
   const matchNumber = String(item.id || item.match_id || item.game_id || item.number || item.matchNumber || "");
   const matchup = `${normalizeName(homeName)} ${normalizeName(awayName)}`;
   if (matchNumber === "1" || (matchup.includes("mexico") && matchup.includes("south africa"))) {
