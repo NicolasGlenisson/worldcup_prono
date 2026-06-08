@@ -690,8 +690,8 @@ function buildFastGlobalStatsScope(match) {
   return {
     title: "Tout compris",
     note: "Stats calculées depuis l'historique public des matchs internationaux.",
-    home: buildTeamStats(match.homeName, teamKey("", match.homeName), homeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
-    away: buildTeamStats(match.awayName, teamKey("", match.awayName), awayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
+    home: buildTeamStats(match.homeName, teamKey("", match.homeName), homeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
+    away: buildTeamStats(match.awayName, teamKey("", match.awayName), awayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
     headToHead: { played: 0, homeWins: 0, draws: 0, awayWins: 0, goals: 0, avgGoals: 0, latest: [] },
     groupRows: [],
     finishedCount: state.globalMatches.length,
@@ -1127,8 +1127,8 @@ function buildMatchStats(match) {
       note: state.globalLastSync
         ? `Stats calculées depuis l’historique public des matchs internationaux. CSV actualisé le ${formatDateTime(state.globalLastSync)}.`
         : "Stats calculées depuis l’historique public des matchs internationaux.",
-      home: buildTeamStats(match.homeName, teamKey("", match.homeName), globalHomeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
-      away: buildTeamStats(match.awayName, teamKey("", match.awayName), globalAwayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: 10 }),
+      home: buildTeamStats(match.homeName, teamKey("", match.homeName), globalHomeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
+      away: buildTeamStats(match.awayName, teamKey("", match.awayName), globalAwayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
       headToHead: buildHeadToHeadStats(match.homeName, match.awayName, globalHeadToHead),
       groupRows: [],
       finishedCount: globalMatches.length,
@@ -1507,9 +1507,9 @@ function renderRecentMatches(stats) {
 
   return `
     <div class="recent-matches">
-      <p class="eyebrow">10 derniers matchs</p>
+      <p class="eyebrow">${FORM_WINDOW} derniers matchs</p>
       <ol>
-        ${stats.recent.slice(0, 10).map((match) => `
+        ${stats.recent.slice(0, FORM_WINDOW).map((match) => `
           <li>
             <span class="form-pill ${match.result.toLowerCase()}">${match.result}</span>
             <div>
