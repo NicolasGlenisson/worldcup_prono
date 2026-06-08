@@ -45,8 +45,9 @@ const HOST_CITY_TIME_ZONES = {
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
   predictions: "cdm_pronos_predictions_v1",
-  cache: "cdm_pronos_match_cache_v1"
+  cache: "cdm_pronos_match_cache_v2"
 };
+const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1"];
 
 const GLOBAL_RESULTS_CACHE = {
   dbName: "cdm_pronos_large_cache_v1",
@@ -210,6 +211,7 @@ const els = {
 boot();
 
 function boot() {
+  clearLegacyMatchCaches();
   bindEvents();
   hydrateSettingsForm();
   render();
@@ -217,6 +219,16 @@ function boot() {
   loadTournamentData();
   hydrateGlobalResultsFromCache();
   registerServiceWorker();
+}
+
+function clearLegacyMatchCaches() {
+  LEGACY_STORAGE_KEYS.forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.warn("Impossible de nettoyer l'ancien cache match", error);
+    }
+  });
 }
 
 function bindEvents() {
