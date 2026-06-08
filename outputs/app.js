@@ -1542,6 +1542,7 @@ function renderAlgorithmicPrediction(stats) {
         <span>Nul ${algo.drawPercent}%</span>
         <span>${escapeHtml(algo.awayName)} ${algo.awayWinPercent}%</span>
       </div>
+      ${renderAlgoDataQuality(algo.dataQuality)}
       ${renderAlgoExplanation(algo.explanation)}
       <dl class="metric-list algo-metrics">
         <div><dt>Score forme</dt><dd>${formatNumber(algo.homeRating)} / ${formatNumber(algo.awayRating)}</dd></div>
@@ -1552,6 +1553,27 @@ function renderAlgorithmicPrediction(stats) {
         ${algo.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
       </ul>
     </section>
+  `;
+}
+
+function renderAlgoDataQuality(dataQuality) {
+  if (!dataQuality) return "";
+  return `
+    <div class="algo-data-quality ${escapeAttr(dataQuality.level)}">
+      <div class="algo-data-quality-head">
+        <div>
+          <h4>${escapeHtml(dataQuality.label)}</h4>
+          <p>${dataQuality.score}/100</p>
+        </div>
+        <strong>${dataQuality.score}</strong>
+      </div>
+      <div class="algo-quality-meter" aria-hidden="true">
+        <span style="width: ${dataQuality.score}%"></span>
+      </div>
+      <ul>
+        ${(dataQuality.details || []).map((detail) => `<li>${escapeHtml(detail)}</li>`).join("")}
+      </ul>
+    </div>
   `;
 }
 
@@ -1626,6 +1648,7 @@ function buildAlgorithmicPrediction(scope) {
   const weakSchedulePenalty = clamp(Math.max(0, -homeMetrics.opponentStrength, -awayMetrics.opponentStrength) * 0.55, 0, 1.2);
   const favoritePercent = Math.max(outcome.homeWinPercent, outcome.drawPercent, outcome.awayWinPercent);
   const confidence = clamp(3.2 + (favoritePercent - 40) / 12 + dataSample * 1.2 - weakSchedulePenalty, 3, 8.5);
+  const dataQuality = buildAlgoDataQuality(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics);
 
   return {
     homeName: home.teamName,
@@ -1641,6 +1664,7 @@ function buildAlgorithmicPrediction(scope) {
     awayWinPercent: outcome.awayWinPercent,
     drawPercent: outcome.drawPercent,
     confidenceLabel: `Confiance ${formatNumber(confidence)}/10`,
+    dataQuality,
     explanation: buildAlgoExplanation(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, {
       homeExpectedGoals,
       awayExpectedGoals,
@@ -1773,6 +1797,47 @@ function buildWeightedRecentMetrics(recent, ownRanking, fallbackOpponentRanking)
     totals.opponentStrength /= totals.weight;
   }
   return totals;
+}
+
+function buildAlgoDataQuality(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics) {
+  const sampleScore = (Math.min(home.summarySample, FORM_WINDOW) + Math.min(away.summarySample, FORM_WINDOW)) / (FORM_WINDOW * 2) * 38;
+  const rankingScore = (homeRanking ? 8 : 0) + (awayRanking ? 8 : 0);
+  const scheduleScore = clamp(((homeMetrics.opponentStrength + awayMetrics.opponentStrength) / 2 + 1.1) / 2.4, 0, 1) * 28;
+  const balanceGap = Math.abs(Math.min(home.summarySample, FORM_WINDOW) - Math.min(away.summarySample, FORM_WINDOW));
+  const balanceScore = clamp(1 - balanceGap / FORM_WINDOW, 0, 1) * 10;
+  const score = Math.round(clamp(sampleScore + rankingScore + scheduleScore + balanceScore, 0, 100));
+  const level = score >= 74 ? "forte" : score >= 52 ? "moyenne" : "faible";
+  const details = buildAlgoDataQualityDetails(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, level);
+  return {
+    score,
+    level,
+    label: `Qualité des données ${level}`,
+    details
+  };
+}
+
+function buildAlgoDataQualityDetails(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, level) {
+  const details = [];
+  const minSample = Math.min(home.summarySample, away.summarySample);
+  if (minSample >= FORM_WINDOW) {
+    details.push(`${FORM_WINDOW} matchs disponibles pour chaque equipe avant la rencontre.`);
+  } else {
+    details.push(`Echantillon incomplet: ${minSample}/${FORM_WINDOW} matchs minimum disponibles.`);
+  }
+  const averageOpponentStrength = (homeMetrics.opponentStrength + awayMetrics.opponentStrength) / 2;
+  if (averageOpponentStrength < -0.45) {
+    details.push("Adversaires recents plutot faibles: lecture a prendre avec prudence.");
+  } else if (averageOpponentStrength > 0.35) {
+    details.push("Adversaires recents solides: les stats sont plus robustes.");
+  } else {
+    details.push("Niveau des adversaires recents correct mais pas decisif.");
+  }
+  if (!homeRanking || !awayRanking) {
+    details.push("Un classement FIFA manque, donc une partie de la ponderation est approximative.");
+  } else if (level === "forte") {
+    details.push("Classements FIFA et historique recents suffisants pour une lecture stable.");
+  }
+  return details.slice(0, 3);
 }
 
 function buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff) {

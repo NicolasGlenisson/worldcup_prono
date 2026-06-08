@@ -1161,6 +1161,79 @@ textarea {
   line-height: 1.35;
 }
 
+.algo-data-quality {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(216, 210, 196, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.72);
+  padding: 10px 12px;
+}
+
+.algo-data-quality-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.algo-data-quality h4,
+.algo-data-quality p {
+  margin: 0;
+}
+
+.algo-data-quality h4 {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.algo-data-quality p {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.algo-data-quality strong {
+  color: var(--accent-strong);
+  font-size: 20px;
+}
+
+.algo-quality-meter {
+  overflow: hidden;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(216, 210, 196, 0.76);
+}
+
+.algo-quality-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.algo-data-quality.faible .algo-quality-meter span {
+  background: #d24f3f;
+}
+
+.algo-data-quality.moyenne .algo-quality-meter span {
+  background: var(--gold);
+}
+
+.algo-data-quality.forte .algo-quality-meter span {
+  background: var(--accent);
+}
+
+.algo-data-quality ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .algo-meter {
   overflow: hidden;
   height: 8px;
