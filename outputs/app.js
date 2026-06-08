@@ -66,7 +66,6 @@ const STORAGE_KEYS = {
   algoPredictions: "cdm_pronos_algo_predictions_v1",
   cache: "cdm_pronos_match_cache_v5"
 };
-const ALGO_FORMULA_VERSION = "2026-06-08-v3-plus-one-test";
 const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2", "cdm_pronos_match_cache_v3", "cdm_pronos_match_cache_v4"];
 
 const GLOBAL_RESULTS_CACHE = {
@@ -202,7 +201,6 @@ const state = {
   lastSync: null,
   settings: readJson(STORAGE_KEYS.settings, DEFAULT_SETTINGS),
   predictions: readJson(STORAGE_KEYS.predictions, {}),
-  algoPredictions: readJson(STORAGE_KEYS.algoPredictions, {}),
   predictionDraft: null,
   algoPredictionCache: new Map(),
   globalMatchesByTeam: new Map(),
@@ -248,7 +246,6 @@ boot();
 
 function boot() {
   clearLegacyMatchCaches();
-  clearStaleAlgorithmicPredictions();
   bindEvents();
   hydrateSettingsForm();
   render();
@@ -266,18 +263,7 @@ function clearLegacyMatchCaches() {
       console.warn("Impossible de nettoyer l'ancien cache match", error);
     }
   });
-}
-
-function clearStaleAlgorithmicPredictions() {
-  let changed = false;
-  for (const [matchId, frozen] of Object.entries(state.algoPredictions)) {
-    if (frozen?.formulaVersion === ALGO_FORMULA_VERSION) continue;
-    delete state.algoPredictions[matchId];
-    changed = true;
-  }
-  if (changed) {
-    writeJson(STORAGE_KEYS.algoPredictions, state.algoPredictions);
-  }
+  localStorage.removeItem(STORAGE_KEYS.algoPredictions);
 }
 
 function bindEvents() {
@@ -305,10 +291,9 @@ function bindEvents() {
 
   els.clearPredictionsButton.addEventListener("click", () => {
     state.predictions = {};
-    state.algoPredictions = {};
     state.algoPredictionCache.clear();
     writeJson(STORAGE_KEYS.predictions, state.predictions);
-    writeJson(STORAGE_KEYS.algoPredictions, state.algoPredictions);
+    localStorage.removeItem(STORAGE_KEYS.algoPredictions);
     render();
     if (state.selectedMatchId) renderMatchPage(state.selectedMatchId);
     toast("Pronos supprimés.");
@@ -326,7 +311,6 @@ async function loadTournamentData({ force = false } = {}) {
       state.teams = cached.teams || [];
       state.source = cached.source || "cache";
       state.lastSync = cached.lastSync || null;
-      freezeDueAlgorithmicPredictions();
       render();
     }
   }
@@ -347,7 +331,6 @@ async function loadTournamentData({ force = false } = {}) {
       : "worldcup26.ir";
     state.lastSync = new Date().toISOString();
     persistCache();
-    freezeDueAlgorithmicPredictions();
     render();
   } catch (primaryError) {
     try {
@@ -358,7 +341,6 @@ async function loadTournamentData({ force = false } = {}) {
       state.source = "openfootball";
       state.lastSync = new Date().toISOString();
       persistCache();
-      freezeDueAlgorithmicPredictions();
       render();
       toast("API live indisponible. Planning de secours chargé.");
     } catch (fallbackError) {
@@ -428,7 +410,6 @@ async function hydrateGlobalResultsFromCache() {
       state.globalLastSync = cached.lastSync || null;
       state.globalStatsStatus = "ready";
       rebuildGlobalMatchesIndex();
-      freezeDueAlgorithmicPredictions();
     } else {
       state.globalMatches = [];
       state.globalLastSync = null;
@@ -456,7 +437,6 @@ async function loadGlobalResults({ silent = false } = {}) {
     rebuildGlobalMatchesIndex();
     state.globalStatsStatus = "ready";
     state.globalLastSync = new Date().toISOString();
-    freezeDueAlgorithmicPredictions();
     render();
 
     try {
@@ -877,10 +857,8 @@ function renderMatchCardPredictions(match, prediction) {
 }
 
 function getMatchCardAlgoPrediction(match) {
-  const frozen = getFrozenAlgorithmicPrediction(match);
-  if (frozen) return frozen.algo;
   if (state.globalStatsStatus !== "ready") return null;
-  const cacheKey = `${ALGO_FORMULA_VERSION}:${match.id}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
+  const cacheKey = `${match.id}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
   if (state.algoPredictionCache.has(cacheKey)) return state.algoPredictionCache.get(cacheKey);
   const scope = buildFastGlobalStatsScope(match);
   const algo = buildAlgorithmicPrediction(scope);
@@ -1218,8 +1196,7 @@ function renderManualPredictionComposer(match) {
 }
 
 function renderMatchTopSummary(match, prediction, matchStats) {
-  const frozen = getFrozenAlgorithmicPrediction(match);
-  const algo = frozen?.algo || getAlgorithmicPredictionFromStats(matchStats);
+  const algo = getAlgorithmicPredictionFromStats(matchStats);
   return `
     <section class="match-score-summary" aria-label="Scores du match">
       <div class="score-summary-card real-score-summary">
@@ -1232,7 +1209,7 @@ function renderMatchTopSummary(match, prediction, matchStats) {
       </div>
       <div class="prono-summary-grid">
         ${renderIaPredictionSummary(match, prediction)}
-        ${renderAlgoPredictionSummary(algo, frozen)}
+        ${renderAlgoPredictionSummary(algo)}
       </div>
     </section>
   `;
@@ -1273,7 +1250,7 @@ function renderIaPredictionSummary(match, prediction) {
   `;
 }
 
-function renderAlgoPredictionSummary(algo, frozen = null) {
+function renderAlgoPredictionSummary(algo) {
   if (!algo) {
     return `
       <div class="score-summary-card prediction-summary empty">
@@ -1288,11 +1265,7 @@ function renderAlgoPredictionSummary(algo, frozen = null) {
   }
 
   const label = `${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}`;
-  const meta = [
-    algo.confidenceLabel,
-    `${algo.homeWinPercent}% / ${algo.drawPercent}% / ${algo.awayWinPercent}%`,
-    frozen ? `Figé le ${formatDateTime(frozen.frozenAt)}` : ""
-  ].filter(Boolean).join(" · ");
+  const meta = `${algo.confidenceLabel} - ${algo.homeWinPercent}% / ${algo.drawPercent}% / ${algo.awayWinPercent}%`;
   return `
     <button class="score-summary-card prediction-summary algo-summary" id="algoSummaryButton" type="button">
       <div>
@@ -1527,8 +1500,7 @@ function renderStatsScope(scope) {
 }
 
 function renderAlgorithmicPrediction(stats) {
-  const frozen = getFrozenAlgorithmicPrediction(stats.match);
-  const algo = frozen?.algo || getAlgorithmicPredictionFromStats(stats);
+  const algo = getAlgorithmicPredictionFromStats(stats);
   if (!algo) {
     return `
       <section class="stats-panel algo-panel" id="algoAnalysis" aria-label="Prono algorithmique">
@@ -1550,7 +1522,7 @@ function renderAlgorithmicPrediction(stats) {
           <p class="eyebrow">Sans IA</p>
           <h3>Prono algo</h3>
         </div>
-        <span class="badge gold">${escapeHtml(frozen ? `Figé ${formatDateTime(frozen.frozenAt)}` : algo.confidenceLabel)}</span>
+        <span class="badge gold">${escapeHtml(algo.confidenceLabel)}</span>
       </div>
       <div class="algo-score">
         <span>${escapeHtml(algo.homeName)}</span>
@@ -1580,48 +1552,6 @@ function renderAlgorithmicPrediction(stats) {
 function getAlgorithmicPredictionFromStats(stats) {
   const scope = stats.global.status === "ready" ? stats.global : stats.worldCup;
   return buildAlgorithmicPrediction(scope);
-}
-
-function getFrozenAlgorithmicPrediction(match) {
-  if (!match?.id) return null;
-  const frozen = state.algoPredictions[match.id];
-  if (frozen?.formulaVersion !== ALGO_FORMULA_VERSION) return null;
-  return frozen?.algo ? frozen : null;
-}
-
-function freezeDueAlgorithmicPredictions() {
-  let changed = false;
-  for (const match of state.matches) {
-    if (!shouldFreezeAlgorithmicPrediction(match) || getFrozenAlgorithmicPrediction(match)) continue;
-    const frozen = buildFrozenAlgorithmicPrediction(match);
-    if (!frozen) continue;
-    state.algoPredictions[match.id] = frozen;
-    changed = true;
-  }
-
-  if (changed) {
-    writeJson(STORAGE_KEYS.algoPredictions, state.algoPredictions);
-  }
-  return changed;
-}
-
-function shouldFreezeAlgorithmicPrediction(match) {
-  return match?.status === "live" || match?.status === "finished";
-}
-
-function buildFrozenAlgorithmicPrediction(match) {
-  if (state.globalStatsStatus !== "ready") return null;
-  const stats = buildMatchStats(match);
-  const algo = getAlgorithmicPredictionFromStats(stats);
-  if (!algo) return null;
-  return {
-    matchId: match.id,
-    frozenAt: new Date().toISOString(),
-    matchStatus: match.status,
-    source: stats.global.status === "ready" ? "global" : "worldCup",
-    formulaVersion: ALGO_FORMULA_VERSION,
-    algo
-  };
 }
 
 function buildAlgorithmicPrediction(scope) {
@@ -1660,8 +1590,8 @@ function buildAlgorithmicPrediction(scope) {
     0.05,
     5
   );
-  const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift) + 1;
-  const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift) + 1;
+  const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift);
+  const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift);
   const drawPercent = Math.round(clamp(27 - Math.abs(ratingDiff) * 4.2, 10, 32));
   const decisivePercent = 100 - drawPercent;
   const homeShare = clamp(0.5 + ratingDiff / 8, 0.12, 0.88);
