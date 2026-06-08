@@ -1542,6 +1542,7 @@ function renderAlgorithmicPrediction(stats) {
         <span>Nul ${algo.drawPercent}%</span>
         <span>${escapeHtml(algo.awayName)} ${algo.awayWinPercent}%</span>
       </div>
+      ${renderAlgoExplanation(algo.explanation)}
       <dl class="metric-list algo-metrics">
         <div><dt>Score forme</dt><dd>${formatNumber(algo.homeRating)} / ${formatNumber(algo.awayRating)}</dd></div>
         <div><dt>Attaque attendue</dt><dd>${formatNumber(algo.homeExpectedGoals)} / ${formatNumber(algo.awayExpectedGoals)}</dd></div>
@@ -1551,6 +1552,30 @@ function renderAlgorithmicPrediction(stats) {
         ${algo.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
       </ul>
     </section>
+  `;
+}
+
+function renderAlgoExplanation(explanation) {
+  if (!explanation) return "";
+  return `
+    <div class="algo-explanation">
+      <p>${escapeHtml(explanation.summary)}</p>
+      <p>${escapeHtml(explanation.scoreLogic)}</p>
+      <div class="algo-explanation-grid">
+        <div>
+          <h4>Ce qui pousse le prono</h4>
+          <ul>
+            ${(explanation.positive || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </div>
+        <div>
+          <h4>Points de prudence</h4>
+          <ul>
+            ${(explanation.caution || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -1616,6 +1641,15 @@ function buildAlgorithmicPrediction(scope) {
     awayWinPercent: outcome.awayWinPercent,
     drawPercent: outcome.drawPercent,
     confidenceLabel: `Confiance ${formatNumber(confidence)}/10`,
+    explanation: buildAlgoExplanation(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, {
+      homeExpectedGoals,
+      awayExpectedGoals,
+      homeWinPercent: outcome.homeWinPercent,
+      awayWinPercent: outcome.awayWinPercent,
+      drawPercent: outcome.drawPercent,
+      fifaPointsDiff,
+      ratingDiff
+    }),
     reasons: buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff)
   };
 }
@@ -1751,6 +1785,86 @@ function buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awa
     `Classement FIFA utilise comme bonus secondaire: ${home.teamName} ${formatFifaRanking(homeRanking)} contre ${away.teamName} ${formatFifaRanking(awayRanking)} (${fifaPointsDiff > 0 ? "+" : ""}${formatNumber(fifaPointsDiff)} pts).`,
     `Force des adversaires recents: ${formatNumber(homeMetrics.opponentStrength)} pour ${home.teamName}, ${formatNumber(awayMetrics.opponentStrength)} pour ${away.teamName}.`
   ];
+}
+
+function buildAlgoExplanation(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, context) {
+  const favoriteSide = getFavoriteSide(context);
+  const favorite = favoriteSide === "home" ? home : away;
+  const outsider = favoriteSide === "home" ? away : home;
+  const favoriteMetrics = favoriteSide === "home" ? homeMetrics : awayMetrics;
+  const outsiderMetrics = favoriteSide === "home" ? awayMetrics : homeMetrics;
+  const favoriteRanking = favoriteSide === "home" ? homeRanking : awayRanking;
+  const outsiderRanking = favoriteSide === "home" ? awayRanking : homeRanking;
+  const favoriteWinPercent = favoriteSide === "home" ? context.homeWinPercent : context.awayWinPercent;
+  const expectedFavoriteGoals = favoriteSide === "home" ? context.homeExpectedGoals : context.awayExpectedGoals;
+  const expectedOutsiderGoals = favoriteSide === "home" ? context.awayExpectedGoals : context.homeExpectedGoals;
+
+  const summary = favoriteSide === "draw"
+    ? `Match projete serre: les formes recentes ne creent pas de favori net et le nul reste haut a ${context.drawPercent}%.`
+    : `${favorite.teamName} ressort favori (${favoriteWinPercent}%) grace a une meilleure combinaison forme recente, production offensive et solidite defensive.`;
+
+  const scoreLogic = favoriteSide === "draw"
+    ? `Le score reste bascule vers l'equilibre car les buts attendus sont proches (${formatNumber(context.homeExpectedGoals)} / ${formatNumber(context.awayExpectedGoals)}).`
+    : `Le score favorise ${favorite.teamName} car ses buts attendus (${formatNumber(expectedFavoriteGoals)}) dominent ceux de ${outsider.teamName} (${formatNumber(expectedOutsiderGoals)}).`;
+
+  return {
+    summary,
+    scoreLogic,
+    positive: buildAlgoPositiveFactors(favorite, outsider, favoriteRanking, outsiderRanking, favoriteMetrics, outsiderMetrics, context, favoriteSide),
+    caution: buildAlgoCautionFactors(favorite, outsider, favoriteMetrics, outsiderMetrics, context, favoriteSide)
+  };
+}
+
+function getFavoriteSide(context) {
+  if (context.homeWinPercent >= context.drawPercent && context.homeWinPercent >= context.awayWinPercent) return "home";
+  if (context.awayWinPercent >= context.homeWinPercent && context.awayWinPercent >= context.drawPercent) return "away";
+  return "draw";
+}
+
+function buildAlgoPositiveFactors(favorite, outsider, favoriteRanking, outsiderRanking, favoriteMetrics, outsiderMetrics, context, favoriteSide) {
+  if (favoriteSide === "draw") {
+    return [
+      "Aucun avantage statistique massif ne sort du modele.",
+      `Les buts attendus restent proches: ${formatNumber(context.homeExpectedGoals)} / ${formatNumber(context.awayExpectedGoals)}.`
+    ];
+  }
+
+  const rankingGap = Number(outsiderRanking?.points || 1500) - Number(favoriteRanking?.points || 1500);
+  const factors = [];
+  if (favoriteMetrics.weightedPointsPerMatch >= outsiderMetrics.weightedPointsPerMatch + 0.35) {
+    factors.push(`Forme recente superieure: ${formatNumber(favoriteMetrics.weightedPointsPerMatch)} pt/match pondere contre ${formatNumber(outsiderMetrics.weightedPointsPerMatch)}.`);
+  }
+  if (favoriteMetrics.weightedAvgFor >= outsiderMetrics.weightedAvgFor + 0.5) {
+    factors.push(`Production offensive plus forte: ${formatNumber(favoriteMetrics.weightedAvgFor)} buts ponderes/match contre ${formatNumber(outsiderMetrics.weightedAvgFor)}.`);
+  }
+  if (favoriteMetrics.weightedAvgAgainst + 0.5 <= outsiderMetrics.weightedAvgAgainst) {
+    factors.push(`Defense recente plus solide: ${formatNumber(favoriteMetrics.weightedAvgAgainst)} but encaisse pondere/match contre ${formatNumber(outsiderMetrics.weightedAvgAgainst)}.`);
+  }
+  if (Math.abs(rankingGap) >= 120) {
+    factors.push(`Ecart FIFA favorable: ${formatFifaRanking(favoriteRanking)} contre ${formatFifaRanking(outsiderRanking)}.`);
+  }
+  if (!factors.length) {
+    factors.push("Le modele donne surtout un avantage global cumule, sans indicateur unique ecrasant.");
+  }
+  return factors.slice(0, 3);
+}
+
+function buildAlgoCautionFactors(favorite, outsider, favoriteMetrics, outsiderMetrics, context, favoriteSide) {
+  const factors = [];
+  const weakestSchedule = Math.min(favoriteMetrics.opponentStrength, outsiderMetrics.opponentStrength);
+  if (weakestSchedule < -0.45) {
+    factors.push("Prudence: une partie de la forme recente vient d'adversaires faibles, donc la confiance est limitee.");
+  }
+  if (favoriteSide !== "draw" && context.drawPercent >= 20) {
+    factors.push(`Le nul reste non-negligeable (${context.drawPercent}%) selon la distribution de buts.`);
+  }
+  if (favoriteSide !== "draw" && outsiderMetrics.weightedAvgFor >= 1.2) {
+    factors.push(`${outsider.teamName} marque assez regulierement pour garder un scenario avec but possible.`);
+  }
+  if (!factors.length) {
+    factors.push("Risque principal: un score exact reste sensible a l'efficacite du jour et aux compositions.");
+  }
+  return factors.slice(0, 2);
 }
 
 function renderStatsInfoButton(scope) {
