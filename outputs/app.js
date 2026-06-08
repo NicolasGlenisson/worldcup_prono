@@ -1566,105 +1566,172 @@ function buildAlgorithmicPrediction(scope) {
   const awayMetrics = buildAlgoTeamMetrics(away, awayRanking, homeRanking);
   const fifaPointsDiff = Number(homeRanking?.points || 0) - Number(awayRanking?.points || 0);
   const fifaRankDiff = Number(awayRanking?.rank || 100) - Number(homeRanking?.rank || 100);
-  const fifaEdge = clamp(fifaPointsDiff / 180 + fifaRankDiff / 28, -1.15, 1.15);
+  const fifaEdge = clamp(fifaPointsDiff / 230 + fifaRankDiff / 36, -1, 1);
 
-  const homeRating = homeMetrics.formScore + homeMetrics.attackScore - awayMetrics.defenseScore + homeMetrics.opponentStrength + fifaEdge;
-  const awayRating = awayMetrics.formScore + awayMetrics.attackScore - homeMetrics.defenseScore + awayMetrics.opponentStrength - fifaEdge;
+  const homeRating = homeMetrics.formScore + homeMetrics.attackScore - awayMetrics.defenseScore + fifaEdge * 0.7;
+  const awayRating = awayMetrics.formScore + awayMetrics.attackScore - homeMetrics.defenseScore - fifaEdge * 0.7;
   const ratingDiff = homeRating - awayRating;
-  const dominanceShift = clamp(ratingDiff / 4.5, -1.15, 1.15);
+  const dominanceShift = clamp(ratingDiff / 4.2, -1.2, 1.2);
   const homeExpectedGoals = clamp(
-    (homeMetrics.weightedAvgFor * 0.55)
-      + (awayMetrics.weightedAvgAgainst * 0.55)
-      + 0.1
-      + fifaEdge * 0.05
-      + dominanceShift * 0.38,
+    (homeMetrics.weightedAvgFor * 0.62)
+      + (awayMetrics.weightedAvgAgainst * 0.58)
+      + 0.08
+      + fifaEdge * 0.04
+      + dominanceShift * 0.34,
     0.05,
     5
   );
   const awayExpectedGoals = clamp(
-    (awayMetrics.weightedAvgFor * 0.55)
-      + (homeMetrics.weightedAvgAgainst * 0.55)
-      + 0.1
-      - fifaEdge * 0.05
-      - dominanceShift * 0.38,
+    (awayMetrics.weightedAvgFor * 0.62)
+      + (homeMetrics.weightedAvgAgainst * 0.58)
+      + 0.08
+      - fifaEdge * 0.04
+      - dominanceShift * 0.34,
     0.05,
     5
   );
-  const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift);
-  const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift);
-  const drawPercent = Math.round(clamp(27 - Math.abs(ratingDiff) * 5.2, 9, 32));
-  const decisivePercent = 100 - drawPercent;
-  const homeShare = clamp(0.5 + ratingDiff / 6.5, 0.1, 0.9);
-  const homeWinPercent = Math.round(decisivePercent * homeShare);
-  const awayWinPercent = 100 - drawPercent - homeWinPercent;
-  const confidence = clamp(Math.abs(ratingDiff) * 1.4 + Math.abs(fifaEdge) * 0.8 + Math.min(home.summarySample, away.summarySample) * 0.35, 3, 8.5);
+  const outcome = buildPoissonOutcome(homeExpectedGoals, awayExpectedGoals);
+  const score = selectRepresentativeScore(homeExpectedGoals, awayExpectedGoals, outcome, dominanceShift);
+  const dataSample = Math.min(home.summarySample, away.summarySample, FORM_WINDOW) / FORM_WINDOW;
+  const weakSchedulePenalty = clamp(Math.max(0, -homeMetrics.opponentStrength, -awayMetrics.opponentStrength) * 0.55, 0, 1.2);
+  const favoritePercent = Math.max(outcome.homeWinPercent, outcome.drawPercent, outcome.awayWinPercent);
+  const confidence = clamp(3.2 + (favoritePercent - 40) / 12 + dataSample * 1.2 - weakSchedulePenalty, 3, 8.5);
 
   return {
     homeName: home.teamName,
     awayName: away.teamName,
-    homeGoals,
-    awayGoals,
+    homeGoals: score.homeGoals,
+    awayGoals: score.awayGoals,
     homeExpectedGoals,
     awayExpectedGoals,
     homeRating,
     awayRating,
     fifaPointsDiff,
-    homeWinPercent,
-    awayWinPercent,
-    drawPercent,
+    homeWinPercent: outcome.homeWinPercent,
+    awayWinPercent: outcome.awayWinPercent,
+    drawPercent: outcome.drawPercent,
     confidenceLabel: `Confiance ${formatNumber(confidence)}/10`,
     reasons: buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff)
   };
 }
 
 function expectedGoalsToScore(expectedGoals, dominance) {
-  const roundingBias = dominance > 0.3 ? 0.85 : dominance < -0.3 ? 0.3 : 0.5;
+  const roundingBias = dominance > 0.25 ? 0.85 : dominance < -0.25 ? 0.32 : 0.5;
   return Math.max(0, Math.min(5, Math.floor(expectedGoals + roundingBias)));
+}
+
+function selectRepresentativeScore(homeExpectedGoals, awayExpectedGoals, outcome, dominanceShift) {
+  let homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift);
+  let awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift);
+  const strongestOutcome = getStrongestOutcome(outcome);
+  if (strongestOutcome === "home" && homeGoals <= awayGoals) {
+    homeGoals = Math.min(5, awayGoals + 1);
+  }
+  if (strongestOutcome === "away" && awayGoals <= homeGoals) {
+    awayGoals = Math.min(5, homeGoals + 1);
+  }
+  if (strongestOutcome === "draw" && Math.abs(homeGoals - awayGoals) <= 1) {
+    const drawGoals = Math.max(0, Math.min(4, Math.round((homeExpectedGoals + awayExpectedGoals) / 2)));
+    homeGoals = drawGoals;
+    awayGoals = drawGoals;
+  }
+  return { homeGoals, awayGoals };
+}
+
+function getStrongestOutcome(outcome) {
+  if (outcome.homeWinPercent >= outcome.drawPercent && outcome.homeWinPercent >= outcome.awayWinPercent) return "home";
+  if (outcome.awayWinPercent >= outcome.homeWinPercent && outcome.awayWinPercent >= outcome.drawPercent) return "away";
+  return "draw";
+}
+
+function buildPoissonOutcome(homeExpectedGoals, awayExpectedGoals) {
+  const maxGoals = 7;
+  const homeDistribution = buildPoissonDistribution(homeExpectedGoals, maxGoals);
+  const awayDistribution = buildPoissonDistribution(awayExpectedGoals, maxGoals);
+  let homeWin = 0;
+  let draw = 0;
+  let awayWin = 0;
+
+  for (let homeGoals = 0; homeGoals <= maxGoals; homeGoals += 1) {
+    for (let awayGoals = 0; awayGoals <= maxGoals; awayGoals += 1) {
+      const probability = homeDistribution[homeGoals] * awayDistribution[awayGoals];
+      if (homeGoals > awayGoals) homeWin += probability;
+      else if (homeGoals === awayGoals) draw += probability;
+      else awayWin += probability;
+    }
+  }
+
+  const total = Math.max(0.001, homeWin + draw + awayWin);
+  const homeWinPercent = Math.round((homeWin / total) * 100);
+  const drawPercent = Math.round((draw / total) * 100);
+  const awayWinPercent = Math.max(0, 100 - homeWinPercent - drawPercent);
+  return { homeWinPercent, drawPercent, awayWinPercent };
+}
+
+function buildPoissonDistribution(expectedGoals, maxGoals) {
+  const lambda = clamp(expectedGoals, 0.05, 6);
+  const distribution = [];
+  let total = 0;
+  for (let goals = 0; goals <= maxGoals; goals += 1) {
+    const probability = Math.exp(-lambda) * (lambda ** goals) / factorial(goals);
+    distribution.push(probability);
+    total += probability;
+  }
+  return distribution.map((probability) => probability / Math.max(0.001, total));
+}
+
+function factorial(value) {
+  let result = 1;
+  for (let index = 2; index <= value; index += 1) result *= index;
+  return result;
 }
 
 function buildAlgoTeamMetrics(stats, ownRanking, fallbackOpponentRanking) {
   const weighted = buildWeightedRecentMetrics(stats.recent, ownRanking, fallbackOpponentRanking);
-  const pointsPerMatch = weighted.sample ? weighted.weightedPoints / weighted.sample : 0;
-  const weightedAvgFor = weighted.sample ? weighted.weightedGoalsFor / weighted.sample : stats.avgFor;
-  const weightedAvgAgainst = weighted.sample ? weighted.weightedGoalsAgainst / weighted.sample : stats.avgAgainst;
+  const pointsPerMatch = weighted.weight ? weighted.weightedPoints / weighted.weight : 0;
+  const weightedAvgFor = weighted.weight ? weighted.weightedGoalsFor / weighted.weight : stats.avgFor;
+  const weightedAvgAgainst = weighted.weight ? weighted.weightedGoalsAgainst / weighted.weight : stats.avgAgainst;
   return {
     weightedPointsPerMatch: pointsPerMatch,
     weightedAvgFor,
     weightedAvgAgainst,
-    formScore: (pointsPerMatch - 1.25) * 1.35,
-    attackScore: (weightedAvgFor - 1.25) * 1.05,
-    defenseScore: (weightedAvgAgainst - 1.05) * 0.95,
+    formScore: (pointsPerMatch - 1.25) * 1.1,
+    attackScore: (weightedAvgFor - 1.25) * 1.2,
+    defenseScore: (weightedAvgAgainst - 1.05) * 0.85,
     opponentStrength: weighted.opponentStrength
   };
 }
 
 function buildWeightedRecentMetrics(recent, ownRanking, fallbackOpponentRanking) {
-  const totals = recent.slice(0, FORM_WINDOW).reduce((acc, match) => {
+  const totals = recent.slice(0, FORM_WINDOW).reduce((acc, match, index) => {
     const teamPoints = Number(match.teamRanking?.points || ownRanking?.points || 1500);
     const opponentPoints = Number(match.opponentRanking?.points || fallbackOpponentRanking?.points || 1500);
-    const relativeStrength = clamp((opponentPoints - teamPoints) / 260, -0.9, 0.9);
-    const resultWeight = clamp(1 + relativeStrength * 0.38, 0.68, 1.34);
-    const goalForWeight = clamp(1 + relativeStrength * 0.48, 0.62, 1.46);
-    const goalAgainstWeight = clamp(1 - relativeStrength * 0.38, 0.66, 1.42);
+    const recencyWeight = 1 / (1 + index * 0.18);
+    const relativeStrength = clamp((opponentPoints - teamPoints) / 320, -0.8, 0.8);
+    const resultWeight = clamp(1 + relativeStrength * 0.28, 0.78, 1.24);
+    const goalForWeight = clamp(1 + relativeStrength * 0.3, 0.76, 1.28);
+    const goalAgainstWeight = clamp(1 - relativeStrength * 0.26, 0.78, 1.26);
     const resultPoints = match.result === "V" ? 3 : match.result === "N" ? 1 : 0;
-    const weakLossPenalty = match.result === "D" ? clamp(-relativeStrength * 0.45, 0, 0.45) : 0;
+    const weakLossPenalty = match.result === "D" ? clamp(-relativeStrength * 0.25, 0, 0.25) : 0;
 
     acc.sample += 1;
-    acc.weightedPoints += Math.max(0, resultPoints * resultWeight - weakLossPenalty);
-    acc.weightedGoalsFor += match.goalsFor * goalForWeight;
-    acc.weightedGoalsAgainst += match.goalsAgainst * goalAgainstWeight;
-    acc.opponentStrength += clamp((opponentPoints - 1500) / 220, -1.2, 1.4);
+    acc.weight += recencyWeight;
+    acc.weightedPoints += Math.max(0, resultPoints * resultWeight - weakLossPenalty) * recencyWeight;
+    acc.weightedGoalsFor += match.goalsFor * goalForWeight * recencyWeight;
+    acc.weightedGoalsAgainst += match.goalsAgainst * goalAgainstWeight * recencyWeight;
+    acc.opponentStrength += clamp((opponentPoints - 1500) / 260, -1.1, 1.3) * recencyWeight;
     return acc;
   }, {
     sample: 0,
+    weight: 0,
     weightedPoints: 0,
     weightedGoalsFor: 0,
     weightedGoalsAgainst: 0,
     opponentStrength: 0
   });
 
-  if (totals.sample) {
-    totals.opponentStrength /= totals.sample;
+  if (totals.weight) {
+    totals.opponentStrength /= totals.weight;
   }
   return totals;
 }
@@ -1674,7 +1741,8 @@ function buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awa
     `${home.teamName}: ${home.won}V ${home.drawn}N ${home.lost}D sur ${home.summarySample} matchs, forme ponderee ${formatNumber(homeMetrics.weightedPointsPerMatch)} pt/match.`,
     `${away.teamName}: ${away.won}V ${away.drawn}N ${away.lost}D sur ${away.summarySample} matchs, forme ponderee ${formatNumber(awayMetrics.weightedPointsPerMatch)} pt/match.`,
     `Buts ponderes: ${home.teamName} ${formatNumber(homeMetrics.weightedAvgFor)} marques / ${formatNumber(homeMetrics.weightedAvgAgainst)} encaisses, ${away.teamName} ${formatNumber(awayMetrics.weightedAvgFor)} / ${formatNumber(awayMetrics.weightedAvgAgainst)}.`,
-    "Le score croise surtout l'attaque recente d'une equipe avec la defense recente de l'adversaire, puis applique un ajustement limite pour l'avantage global.",
+    "Les 5 matchs sont ponderes par recence; la valeur des adversaires ajuste les buts et la forme une seule fois.",
+    "Les probabilites viennent d'un modele de buts type Poisson construit depuis les attaques/defenses attendues.",
     `Classement FIFA utilise comme bonus secondaire: ${home.teamName} ${formatFifaRanking(homeRanking)} contre ${away.teamName} ${formatFifaRanking(awayRanking)} (${fifaPointsDiff > 0 ? "+" : ""}${formatNumber(fifaPointsDiff)} pts).`,
     `Force des adversaires recents: ${formatNumber(homeMetrics.opponentStrength)} pour ${home.teamName}, ${formatNumber(awayMetrics.opponentStrength)} pour ${away.teamName}.`
   ];
