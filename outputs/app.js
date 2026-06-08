@@ -20,6 +20,27 @@ const INTERNATIONAL_RESULTS_URL =
 const INTERNATIONAL_RESULTS_SIZE_LABEL = "3,55 Mio";
 const FIFA_RANKINGS = window.FIFA_RANKINGS || { teams: {} };
 const FORM_WINDOW = 5;
+const FRANCE_TIME_ZONE = "Europe/Paris";
+const HOST_CITY_TIME_ZONES = {
+  "atlanta": "America/New_York",
+  "boston": "America/New_York",
+  "dallas": "America/Chicago",
+  "east rutherford": "America/New_York",
+  "guadalajara": "America/Mexico_City",
+  "houston": "America/Chicago",
+  "kansas city": "America/Chicago",
+  "los angeles": "America/Los_Angeles",
+  "mexico city": "America/Mexico_City",
+  "miami": "America/New_York",
+  "monterrey": "America/Mexico_City",
+  "new york": "America/New_York",
+  "philadelphia": "America/New_York",
+  "san francisco": "America/Los_Angeles",
+  "santa clara": "America/Los_Angeles",
+  "seattle": "America/Los_Angeles",
+  "toronto": "America/Toronto",
+  "vancouver": "America/Vancouver"
+};
 
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
@@ -445,8 +466,9 @@ function normalizeWorldCup26Matches(raw, teamLookup = new Map()) {
     const dateValue = item.datetime || item.date_time || item.kickoff || item.start_at || item.startTime || item.date;
     const localDateValue = item.local_date || item.localDate;
     const timeValue = item.time || item.hour || item.match_time;
-    const preferredDateValue = localDateValue || dateValue;
-    const date = parseMatchDate(preferredDateValue, timeValue);
+    const sourceTimeZone = getMatchSourceTimeZone(item);
+    const preferredDateValue = dateValue || localDateValue;
+    const date = parseMatchDate(preferredDateValue, timeValue, sourceTimeZone);
     const statusText = [item.status, item.state, item.match_status, item.finished, item.time_elapsed].filter(Boolean).join(" ");
     const status = normalizeStatus(statusText, score, date);
     const id = String(item.id || item.match_id || item.game_id || item.number || item.matchNumber || stableId(homeName, awayName, date, index));
@@ -460,7 +482,7 @@ function normalizeWorldCup26Matches(raw, teamLookup = new Map()) {
       homeScore: score.home,
       awayScore: score.away,
       date,
-      rawDate: String(preferredDateValue || ""),
+      rawDate: String(preferredDateValue || localDateValue || ""),
       stage: item.stage || item.round || item.phase || item.group || item.group_name || "Coupe du Monde",
       group: item.group || item.group_name || item.pool || "",
       venue: readVenue(item),
@@ -563,11 +585,32 @@ function readVenue(item) {
   return [stadium.name || stadium.title, stadium.city || item.city].filter(Boolean).join(", ");
 }
 
-function parseMatchDate(dateValue, timeValue) {
-  if (!dateValue) return null;
+function getMatchSourceTimeZone(item) {
+  const explicit = item.timezone || item.time_zone || item.tz;
+  if (explicit) return String(explicit);
+  const stadium = item.stadium || item.venue || item.location || item.ground || {};
+  const candidates = [
+    item.city,
+    item.host_city,
+    item.venue_city,
+    typeof stadium === "object" ? stadium.city : "",
+    typeof stadium === "string" ? stadium : "",
+    item.country,
+    item.host_country
+  ].filter(Boolean).map((value) => cleanName(value).toLowerCase());
 
-  const direct = new Date(dateValue);
-  if (!Number.isNaN(direct.getTime())) return direct.toISOString();
+  for (const candidate of candidates) {
+    for (const [city, timeZone] of Object.entries(HOST_CITY_TIME_ZONES)) {
+      if (candidate.includes(city)) return timeZone;
+    }
+  }
+  if (candidates.some((candidate) => candidate.includes("mexico"))) return "America/Mexico_City";
+  if (candidates.some((candidate) => candidate.includes("canada"))) return "America/Toronto";
+  return "";
+}
+
+function parseMatchDate(dateValue, timeValue, sourceTimeZone = "") {
+  if (!dateValue) return null;
 
   const text = [dateValue, timeValue].filter(Boolean).join(" ").trim();
   const withoutUtcOffset = text.replace(/UTC([+-]\d{1,2})/i, (_, offset) => {
@@ -575,8 +618,76 @@ function parseMatchDate(dateValue, timeValue) {
     const hour = offset.replace(/[+-]/, "").padStart(2, "0");
     return `${sign}${hour}:00`;
   });
+  if (hasExplicitTimeZone(withoutUtcOffset)) {
+    const direct = new Date(withoutUtcOffset);
+    if (!Number.isNaN(direct.getTime())) return direct.toISOString();
+  }
+
+  if (sourceTimeZone && hasClockTime(withoutUtcOffset)) {
+    const localParts = parseLocalDateTimeParts(withoutUtcOffset);
+    if (localParts) return zonedTimeToUtc(localParts, sourceTimeZone).toISOString();
+  }
+
+  const direct = new Date(dateValue);
+  if (!Number.isNaN(direct.getTime())) return direct.toISOString();
+
   const parsed = new Date(withoutUtcOffset);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function hasExplicitTimeZone(value) {
+  return /(?:z|[+-]\d{2}:?\d{2})$/i.test(String(value).trim());
+}
+
+function hasClockTime(value) {
+  return /\b\d{1,2}:\d{2}\b/.test(String(value));
+}
+
+function parseLocalDateTimeParts(value) {
+  const match = String(value).match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4] || 0),
+    minute: Number(match[5] || 0),
+    second: Number(match[6] || 0)
+  };
+}
+
+function zonedTimeToUtc(parts, timeZone) {
+  let utc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const zoned = getDateTimePartsInZone(new Date(utc), timeZone);
+    const delta = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+      - Date.UTC(zoned.year, zoned.month - 1, zoned.day, zoned.hour, zoned.minute, zoned.second);
+    if (delta === 0) break;
+    utc += delta;
+  }
+  return new Date(utc);
+}
+
+function getDateTimePartsInZone(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
+  return {
+    year: values.year,
+    month: values.month,
+    day: values.day,
+    hour: values.hour,
+    minute: values.minute,
+    second: values.second
+  };
 }
 
 function normalizeStatus(rawStatus, score, date) {
@@ -2415,7 +2526,8 @@ function formatMatchDate(match) {
   if (!match.date) return match.rawDate || "Date à confirmer";
   return new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
+    timeZone: FRANCE_TIME_ZONE
   }).format(new Date(match.date));
 }
 
