@@ -848,7 +848,7 @@ function buildMatchScopeFilterOptions() {
   });
   return [
     ...Array.from(groups.values()).sort((a, b) => normalizeGroupName(a.label).localeCompare(normalizeGroupName(b.label), "fr", { numeric: true })),
-    ...Array.from(phases.values()).sort((a, b) => a.label.localeCompare(b.label, "fr", { numeric: true, sensitivity: "base" }))
+    ...Array.from(phases.values()).sort(sortPhaseFilterOptions)
   ];
 }
 
@@ -2914,6 +2914,23 @@ function normalizeStageName(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function sortPhaseFilterOptions(a, b) {
+  const byOrder = getPhaseOrder(a.label) - getPhaseOrder(b.label);
+  if (byOrder) return byOrder;
+  return a.label.localeCompare(b.label, "fr", { numeric: true, sensitivity: "base" });
+}
+
+function getPhaseOrder(label) {
+  const normalized = normalizeStageName(label);
+  if (normalized.includes("round-of-32") || normalized.includes("32") || normalized.includes("seizieme")) return 10;
+  if (normalized.includes("round-of-16") || normalized.includes("16") || normalized.includes("huitieme")) return 20;
+  if (normalized.includes("quarter") || normalized.includes("quart")) return 30;
+  if (normalized.includes("semi") || normalized.includes("demi")) return 40;
+  if (normalized.includes("third") || normalized.includes("3rd") || normalized.includes("bronze") || normalized.includes("petite-finale")) return 50;
+  if (normalized.includes("final")) return 60;
+  return 45;
 }
 
 function namesEqual(a, b) {
