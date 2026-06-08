@@ -66,7 +66,7 @@ const STORAGE_KEYS = {
   algoPredictions: "cdm_pronos_algo_predictions_v1",
   cache: "cdm_pronos_match_cache_v5"
 };
-const ALGO_FORMULA_VERSION = "2026-06-08-v2";
+const ALGO_FORMULA_VERSION = "2026-06-08-v3-plus-one-test";
 const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2", "cdm_pronos_match_cache_v3", "cdm_pronos_match_cache_v4"];
 
 const GLOBAL_RESULTS_CACHE = {
@@ -1660,8 +1660,8 @@ function buildAlgorithmicPrediction(scope) {
     0.05,
     5
   );
-  const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift);
-  const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift);
+  const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift) + 1;
+  const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift) + 1;
   const drawPercent = Math.round(clamp(27 - Math.abs(ratingDiff) * 4.2, 10, 32));
   const decisivePercent = 100 - drawPercent;
   const homeShare = clamp(0.5 + ratingDiff / 8, 0.12, 0.88);
