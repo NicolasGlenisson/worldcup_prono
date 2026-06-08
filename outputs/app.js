@@ -1573,28 +1573,28 @@ function buildAlgorithmicPrediction(scope) {
   const ratingDiff = homeRating - awayRating;
   const dominanceShift = clamp(ratingDiff / 4.5, -1.15, 1.15);
   const homeExpectedGoals = clamp(
-    (homeMetrics.weightedAvgFor * 0.45)
-      + (awayMetrics.weightedAvgAgainst * 0.5)
-      + 0.12
+    (homeMetrics.weightedAvgFor * 0.55)
+      + (awayMetrics.weightedAvgAgainst * 0.55)
+      + 0.1
       + fifaEdge * 0.05
-      + dominanceShift * 0.3,
+      + dominanceShift * 0.38,
     0.05,
     5
   );
   const awayExpectedGoals = clamp(
-    (awayMetrics.weightedAvgFor * 0.45)
-      + (homeMetrics.weightedAvgAgainst * 0.5)
-      + 0.12
+    (awayMetrics.weightedAvgFor * 0.55)
+      + (homeMetrics.weightedAvgAgainst * 0.55)
+      + 0.1
       - fifaEdge * 0.05
-      - dominanceShift * 0.3,
+      - dominanceShift * 0.38,
     0.05,
     5
   );
   const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift);
   const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift);
-  const drawPercent = Math.round(clamp(27 - Math.abs(ratingDiff) * 4.2, 10, 32));
+  const drawPercent = Math.round(clamp(27 - Math.abs(ratingDiff) * 5.2, 9, 32));
   const decisivePercent = 100 - drawPercent;
-  const homeShare = clamp(0.5 + ratingDiff / 8, 0.12, 0.88);
+  const homeShare = clamp(0.5 + ratingDiff / 6.5, 0.1, 0.9);
   const homeWinPercent = Math.round(decisivePercent * homeShare);
   const awayWinPercent = 100 - drawPercent - homeWinPercent;
   const confidence = clamp(Math.abs(ratingDiff) * 1.4 + Math.abs(fifaEdge) * 0.8 + Math.min(home.summarySample, away.summarySample) * 0.35, 3, 8.5);
@@ -1618,7 +1618,7 @@ function buildAlgorithmicPrediction(scope) {
 }
 
 function expectedGoalsToScore(expectedGoals, dominance) {
-  const roundingBias = dominance > 0.35 ? 0.65 : dominance < -0.35 ? 0.35 : 0.5;
+  const roundingBias = dominance > 0.3 ? 0.85 : dominance < -0.3 ? 0.3 : 0.5;
   return Math.max(0, Math.min(5, Math.floor(expectedGoals + roundingBias)));
 }
 
