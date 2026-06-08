@@ -1624,16 +1624,30 @@ function buildAlgorithmicPrediction(scope) {
   const homeRating = homeMetrics.formScore + homeMetrics.attackScore - awayMetrics.defenseScore + homeMetrics.opponentStrength + fifaEdge;
   const awayRating = awayMetrics.formScore + awayMetrics.attackScore - homeMetrics.defenseScore + awayMetrics.opponentStrength - fifaEdge;
   const ratingDiff = homeRating - awayRating;
-  const totalGoalsBase = clamp((homeMetrics.weightedAvgFor + awayMetrics.weightedAvgFor + homeMetrics.weightedAvgAgainst + awayMetrics.weightedAvgAgainst) / 2, 1.4, 3.6);
-  const homeExpectedGoals = clamp((homeMetrics.weightedAvgFor * 0.52) + (awayMetrics.weightedAvgAgainst * 0.38) + 0.15 + fifaEdge * 0.08, 0.2, 4.2);
-  const awayExpectedGoals = clamp((awayMetrics.weightedAvgFor * 0.52) + (homeMetrics.weightedAvgAgainst * 0.38) - fifaEdge * 0.08, 0.2, 4.2);
-  const scaledHomeXg = clamp(homeExpectedGoals * (totalGoalsBase / Math.max(0.8, homeExpectedGoals + awayExpectedGoals)), 0, 5);
-  const scaledAwayXg = clamp(awayExpectedGoals * (totalGoalsBase / Math.max(0.8, homeExpectedGoals + awayExpectedGoals)), 0, 5);
-  const homeGoals = Math.max(0, Math.min(5, Math.round(scaledHomeXg + ratingDiff * 0.08)));
-  const awayGoals = Math.max(0, Math.min(5, Math.round(scaledAwayXg - ratingDiff * 0.08)));
-  const drawPercent = Math.round(clamp(28 - Math.abs(ratingDiff) * 3, 14, 32));
+  const dominanceShift = clamp(ratingDiff / 4.5, -1.15, 1.15);
+  const homeExpectedGoals = clamp(
+    (homeMetrics.weightedAvgFor * 0.45)
+      + (awayMetrics.weightedAvgAgainst * 0.5)
+      + 0.12
+      + fifaEdge * 0.05
+      + dominanceShift * 0.3,
+    0.05,
+    5
+  );
+  const awayExpectedGoals = clamp(
+    (awayMetrics.weightedAvgFor * 0.45)
+      + (homeMetrics.weightedAvgAgainst * 0.5)
+      + 0.12
+      - fifaEdge * 0.05
+      - dominanceShift * 0.3,
+    0.05,
+    5
+  );
+  const homeGoals = expectedGoalsToScore(homeExpectedGoals, dominanceShift);
+  const awayGoals = expectedGoalsToScore(awayExpectedGoals, -dominanceShift);
+  const drawPercent = Math.round(clamp(27 - Math.abs(ratingDiff) * 4.2, 10, 32));
   const decisivePercent = 100 - drawPercent;
-  const homeShare = clamp(0.5 + ratingDiff / 10, 0.18, 0.82);
+  const homeShare = clamp(0.5 + ratingDiff / 8, 0.12, 0.88);
   const homeWinPercent = Math.round(decisivePercent * homeShare);
   const awayWinPercent = 100 - drawPercent - homeWinPercent;
   const confidence = clamp(Math.abs(ratingDiff) * 1.4 + Math.abs(fifaEdge) * 0.8 + Math.min(home.summarySample, away.summarySample) * 0.35, 3, 8.5);
@@ -1643,8 +1657,8 @@ function buildAlgorithmicPrediction(scope) {
     awayName: away.teamName,
     homeGoals,
     awayGoals,
-    homeExpectedGoals: scaledHomeXg,
-    awayExpectedGoals: scaledAwayXg,
+    homeExpectedGoals,
+    awayExpectedGoals,
     homeRating,
     awayRating,
     fifaPointsDiff,
@@ -1654,6 +1668,11 @@ function buildAlgorithmicPrediction(scope) {
     confidenceLabel: `Confiance ${formatNumber(confidence)}/10`,
     reasons: buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awayMetrics, fifaPointsDiff)
   };
+}
+
+function expectedGoalsToScore(expectedGoals, dominance) {
+  const roundingBias = dominance > 0.35 ? 0.65 : dominance < -0.35 ? 0.35 : 0.5;
+  return Math.max(0, Math.min(5, Math.floor(expectedGoals + roundingBias)));
 }
 
 function buildAlgoTeamMetrics(stats, ownRanking, fallbackOpponentRanking) {
@@ -1708,6 +1727,7 @@ function buildAlgoReasons(home, away, homeRanking, awayRanking, homeMetrics, awa
     `${home.teamName}: ${home.won}V ${home.drawn}N ${home.lost}D sur ${home.summarySample} matchs, forme ponderee ${formatNumber(homeMetrics.weightedPointsPerMatch)} pt/match.`,
     `${away.teamName}: ${away.won}V ${away.drawn}N ${away.lost}D sur ${away.summarySample} matchs, forme ponderee ${formatNumber(awayMetrics.weightedPointsPerMatch)} pt/match.`,
     `Buts ponderes: ${home.teamName} ${formatNumber(homeMetrics.weightedAvgFor)} marques / ${formatNumber(homeMetrics.weightedAvgAgainst)} encaisses, ${away.teamName} ${formatNumber(awayMetrics.weightedAvgFor)} / ${formatNumber(awayMetrics.weightedAvgAgainst)}.`,
+    "Le score croise surtout l'attaque recente d'une equipe avec la defense recente de l'adversaire, puis applique un ajustement limite pour l'avantage global.",
     `Classement FIFA utilise comme bonus secondaire: ${home.teamName} ${formatFifaRanking(homeRanking)} contre ${away.teamName} ${formatFifaRanking(awayRanking)} (${fifaPointsDiff > 0 ? "+" : ""}${formatNumber(fifaPointsDiff)} pts).`,
     `Force des adversaires recents: ${formatNumber(homeMetrics.opponentStrength)} pour ${home.teamName}, ${formatNumber(awayMetrics.opponentStrength)} pour ${away.teamName}.`
   ];
