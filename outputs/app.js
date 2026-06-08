@@ -858,7 +858,7 @@ function renderMatchCardPredictions(match, prediction) {
 
 function getMatchCardAlgoPrediction(match) {
   if (state.globalStatsStatus !== "ready") return null;
-  const cacheKey = `${match.id}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
+  const cacheKey = `${match.id}:${match.date || ""}:${state.globalMatches.length}:${state.globalLastSync || ""}`;
   if (state.algoPredictionCache.has(cacheKey)) return state.algoPredictionCache.get(cacheKey);
   const scope = buildFastGlobalStatsScope(match);
   const algo = buildAlgorithmicPrediction(scope);
@@ -871,7 +871,7 @@ function buildFastGlobalStatsScope(match) {
   const awayMatches = getIndexedHistoricalMatchesBefore(match.awayName, match.date);
   return {
     title: "Tout compris",
-    note: "Stats calculées depuis l'historique public des matchs internationaux.",
+    note: buildStatsCutoffNote("Stats calculées depuis l'historique public des matchs internationaux.", match.date),
     home: buildTeamStats(match.homeName, teamKey("", match.homeName), homeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
     away: buildTeamStats(match.awayName, teamKey("", match.awayName), awayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
     headToHead: { played: 0, homeWins: 0, draws: 0, awayWins: 0, goals: 0, avgGoals: 0, latest: [] },
@@ -1301,9 +1301,9 @@ function buildMatchStats(match) {
     match,
     worldCup: {
       title: "Coupe du Monde",
-      note: "Stats calculées uniquement depuis les matchs du tournoi chargés.",
-      home: buildTeamStats(match.homeName, homeKey, homeMatches),
-      away: buildTeamStats(match.awayName, awayKey, awayMatches),
+      note: buildStatsCutoffNote("Stats calculées uniquement depuis les matchs du tournoi chargés.", match.date),
+      home: buildTeamStats(match.homeName, homeKey, homeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
+      away: buildTeamStats(match.awayName, awayKey, awayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
       headToHead: buildHeadToHeadStats(match.homeName, match.awayName, headToHead),
       groupRows: [findGroupRow(match.homeTeamId, match.homeName), findGroupRow(match.awayTeamId, match.awayName)],
       finishedCount: finishedMatches.length,
@@ -1312,9 +1312,9 @@ function buildMatchStats(match) {
     },
     global: {
       title: "Tout compris",
-      note: state.globalLastSync
+      note: buildStatsCutoffNote(state.globalLastSync
         ? `Stats calculées depuis l’historique public des matchs internationaux. CSV actualisé le ${formatDateTime(state.globalLastSync)}.`
-        : "Stats calculées depuis l’historique public des matchs internationaux.",
+        : "Stats calculées depuis l’historique public des matchs internationaux.", match.date),
       home: buildTeamStats(match.homeName, teamKey("", match.homeName), globalHomeMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
       away: buildTeamStats(match.awayName, teamKey("", match.awayName), globalAwayMatches, { averageWindow: FORM_WINDOW, summaryWindow: FORM_WINDOW, displayWindow: FORM_WINDOW }),
       headToHead: buildHeadToHeadStats(match.homeName, match.awayName, globalHeadToHead),
@@ -1376,6 +1376,11 @@ function buildTeamStats(teamName, key, matches, options = {}) {
     avgFor: averageSample ? recentTotals.goalsFor / averageSample : 0,
     avgAgainst: averageSample ? recentTotals.goalsAgainst / averageSample : 0
   };
+}
+
+function buildStatsCutoffNote(baseNote, matchDate) {
+  if (!matchDate) return `${baseNote} Les matchs pris en compte sont ceux disponibles avant la rencontre.`;
+  return `${baseNote} Les 5 derniers matchs affichés et le prono algo utilisent uniquement les matchs joués avant le ${formatShortDate(matchDate)}.`;
 }
 
 function buildTeamMatchLine(match, key) {
@@ -2550,8 +2555,7 @@ function teamKey(id, name) {
 }
 
 function getHistoricalMatchesBefore(match) {
-  const cutoff = match.date ? new Date(match.date).getTime() : Date.now();
-  return state.globalMatches.filter((item) => new Date(item.date).getTime() < cutoff);
+  return state.globalMatches.filter((item) => isHistoricalDateBeforeMatch(item.date, match.date));
 }
 
 function rebuildGlobalMatchesIndex() {
@@ -2574,9 +2578,26 @@ function addGlobalMatchToIndex(teamName, match) {
 }
 
 function getIndexedHistoricalMatchesBefore(teamName, date) {
-  const cutoff = date ? new Date(date).getTime() : Date.now();
   const matches = state.globalMatchesByTeam.get(normalizeName(teamName)) || [];
-  return matches.filter((item) => new Date(item.date || 0).getTime() < cutoff).slice(0, 12);
+  return matches.filter((item) => isHistoricalDateBeforeMatch(item.date, date)).slice(0, 12);
+}
+
+function isHistoricalDateBeforeMatch(historyDate, matchDate) {
+  if (!historyDate) return false;
+  if (!matchDate) return new Date(historyDate).getTime() < Date.now();
+  const historyKey = getDateKey(historyDate);
+  const matchKey = getDateKey(matchDate);
+  if (historyKey && matchKey) return historyKey < matchKey;
+  return new Date(historyDate).getTime() < new Date(matchDate).getTime();
+}
+
+function getDateKey(value) {
+  const raw = String(value || "");
+  const direct = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct) return direct[1];
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
 function matchIncludesTeamName(match, teamName) {
