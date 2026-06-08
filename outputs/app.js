@@ -955,6 +955,13 @@ function renderMatchPage(matchId) {
     });
   }
 
+  const algoSummaryButton = els.matchPageBody.querySelector("#algoSummaryButton");
+  if (algoSummaryButton) {
+    algoSummaryButton.addEventListener("click", () => {
+      els.matchPageBody.querySelector("#algoAnalysis")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   els.matchPageBody.querySelectorAll(".info-button").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -1084,14 +1091,14 @@ function renderAlgoPredictionSummary(algo) {
   const label = `${algo.homeName} ${algo.homeGoals} - ${algo.awayGoals} ${algo.awayName}`;
   const meta = `${algo.confidenceLabel} · ${algo.homeWinPercent}% / ${algo.drawPercent}% / ${algo.awayWinPercent}%`;
   return `
-    <div class="score-summary-card prediction-summary algo-summary">
+    <button class="score-summary-card prediction-summary algo-summary" id="algoSummaryButton" type="button">
       <div>
         <p class="eyebrow">Score prono algo</p>
         <h3>${escapeHtml(label)}</h3>
         <small>${escapeHtml(meta)}</small>
       </div>
-      <span class="badge gold">Sans IA</span>
-    </div>
+      <span class="badge gold">Voir détail</span>
+    </button>
   `;
 }
 
@@ -1315,7 +1322,7 @@ function renderAlgorithmicPrediction(stats) {
   const algo = getAlgorithmicPredictionFromStats(stats);
   if (!algo) {
     return `
-      <section class="stats-panel algo-panel" aria-label="Prono algorithmique">
+      <section class="stats-panel algo-panel" id="algoAnalysis" aria-label="Prono algorithmique">
         <div class="panel-heading">
           <div>
             <p class="eyebrow">Sans IA</p>
@@ -1328,7 +1335,7 @@ function renderAlgorithmicPrediction(stats) {
   }
 
   return `
-    <section class="stats-panel algo-panel" aria-label="Prono algorithmique">
+    <section class="stats-panel algo-panel" id="algoAnalysis" aria-label="Prono algorithmique">
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Sans IA</p>
