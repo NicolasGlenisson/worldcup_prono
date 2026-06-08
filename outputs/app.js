@@ -45,9 +45,9 @@ const HOST_CITY_TIME_ZONES = {
 const STORAGE_KEYS = {
   settings: "cdm_pronos_settings_v1",
   predictions: "cdm_pronos_predictions_v1",
-  cache: "cdm_pronos_match_cache_v3"
+  cache: "cdm_pronos_match_cache_v4"
 };
-const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2"];
+const LEGACY_STORAGE_KEYS = ["cdm_pronos_match_cache_v1", "cdm_pronos_match_cache_v2", "cdm_pronos_match_cache_v3"];
 
 const GLOBAL_RESULTS_CACHE = {
   dbName: "cdm_pronos_large_cache_v1",
@@ -662,15 +662,28 @@ function hasClockTime(value) {
 }
 
 function parseLocalDateTimeParts(value) {
-  const match = String(value).match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (!match) return null;
+  const text = String(value).trim();
+  const isoMatch = text.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (isoMatch) {
+    return {
+      year: Number(isoMatch[1]),
+      month: Number(isoMatch[2]),
+      day: Number(isoMatch[3]),
+      hour: Number(isoMatch[4] || 0),
+      minute: Number(isoMatch[5] || 0),
+      second: Number(isoMatch[6] || 0)
+    };
+  }
+
+  const usMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!usMatch) return null;
   return {
-    year: Number(match[1]),
-    month: Number(match[2]),
-    day: Number(match[3]),
-    hour: Number(match[4] || 0),
-    minute: Number(match[5] || 0),
-    second: Number(match[6] || 0)
+    year: Number(usMatch[3]),
+    month: Number(usMatch[1]),
+    day: Number(usMatch[2]),
+    hour: Number(usMatch[4] || 0),
+    minute: Number(usMatch[5] || 0),
+    second: Number(usMatch[6] || 0)
   };
 }
 
