@@ -647,7 +647,7 @@ function renderMatchCard(match) {
   return `
     <button class="match-card" type="button" data-match-id="${escapeAttr(match.id)}">
       <div class="match-meta">
-        <span>${escapeHtml(match.stage || "Match")}</span>
+        <span>${escapeHtml(formatMatchStageLabel(match))}</span>
         ${statusBadge}
       </div>
       ${renderMatchScoreLine(match)}
@@ -912,7 +912,7 @@ function renderMatchPage(matchId) {
   }
 
   const prediction = state.predictions[match.id];
-  els.matchPageStage.textContent = match.stage || "Match";
+  els.matchPageStage.textContent = formatMatchStageLabel(match);
   els.matchPageTitle.textContent = `${match.homeName} - ${match.awayName}`;
   els.matchPageBody.innerHTML = renderMatchDetail(match, prediction);
 
@@ -2291,6 +2291,22 @@ function formatFifaRanking(ranking) {
   if (!ranking?.rank) return "Classement FIFA non disponible";
   const points = Number.isFinite(Number(ranking.points)) ? ` - ${formatNumber(ranking.points)} pts` : "";
   return `FIFA #${ranking.rank}${points}`;
+}
+
+function formatMatchStageLabel(match) {
+  const group = cleanName(match?.group);
+  const stage = cleanName(match?.stage);
+  if (group) return formatGroupLabel(group);
+  if (/^[A-Z]$/i.test(stage)) return formatGroupLabel(stage);
+  return stage || "Match";
+}
+
+function formatGroupLabel(groupName) {
+  const cleanGroup = cleanName(groupName);
+  if (!cleanGroup) return "Groupe";
+  if (/^groupe\s+/i.test(cleanGroup)) return cleanGroup;
+  if (/^group\s+/i.test(cleanGroup)) return cleanGroup.replace(/^group/i, "Groupe");
+  return `Groupe ${cleanGroup}`;
 }
 
 function findGroupByName(groupName) {
